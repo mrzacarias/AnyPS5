@@ -112,7 +112,7 @@ std::vector<std::uint8_t> GuestModuleWriter::WriteLinux(const Relinker::GuestIma
     bytes.insert(bytes.end(), image.Dynamic.RelaPltData.begin(), image.Dynamic.RelaPltData.end());
     constexpr std::size_t kArgsDisplacement = 3, kTargetDisplacement = 0x11, kResultDisplacement = 0x19;
     constexpr std::size_t kStubSize = 0x1f;
-    const auto stubDisplacement = [](std::uint64_t target, std::uint64_t next, std::uint64_t start) {
+    const auto stubDisplacement = [](std::uint64_t target, std::uint64_t next) {
         const auto distance = static_cast<std::int64_t>(target) - static_cast<std::int64_t>(next);
         if (distance < std::numeric_limits<std::int32_t>::min() || distance > std::numeric_limits<std::int32_t>::max())
             throw Domain::RelinkerException("Guest initializer exceeds relative branch range");
@@ -124,15 +124,15 @@ std::vector<std::uint8_t> GuestModuleWriter::WriteLinux(const Relinker::GuestIma
         std::vector<std::uint8_t> stub(kStubSize, 0xc3);
         stub[0x00] = 0x50;
         stub[0x01] = 0xff; stub[0x02] = 0x15;
-        Io::WriteU32(stub, kArgsDisplacement, stubDisplacement(argsSlot, start + 7, start));
+        Io::WriteU32(stub, kArgsDisplacement, stubDisplacement(argsSlot, start + 7));
         stub[0x07] = 0x48; stub[0x08] = 0x8b; stub[0x09] = 0x38;
         stub[0x0a] = 0x48; stub[0x0b] = 0x8b; stub[0x0c] = 0x70; stub[0x0d] = 0x08;
         stub[0x0e] = 0x31; stub[0x0f] = 0xd2;
         stub[0x10] = 0xe8;
-        Io::WriteU32(stub, kTargetDisplacement, stubDisplacement(target, start + 0x15, start));
+        Io::WriteU32(stub, kTargetDisplacement, stubDisplacement(target, start + 0x15));
         stub[0x15] = 0x89; stub[0x16] = 0xc7;
         stub[0x17] = 0xff; stub[0x18] = 0x15;
-        Io::WriteU32(stub, kResultDisplacement, stubDisplacement(resultSlot, start + 0x1d, start));
+        Io::WriteU32(stub, kResultDisplacement, stubDisplacement(resultSlot, start + 0x1d));
         stub[0x1d] = 0x58;
         stub[0x1e] = 0xc3;
         bytes.insert(bytes.end(), stub.begin(), stub.end());
@@ -162,7 +162,7 @@ std::vector<std::uint8_t> GuestModuleWriter::WriteLinux(const Relinker::GuestIma
     tag(10, strings.size());
     tag(6, symAddress);
     tag(11, 24);
-    if (!image.Dynamic.RelaData.empty()) {
+    if (!relaData.empty()) {
         tag(7, relaAddress);
         tag(8, relaData.size());
         tag(9, 24);

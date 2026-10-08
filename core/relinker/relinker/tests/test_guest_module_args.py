@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 
-from test_guest_symbol_names import imported_symbols, module_symbols
+from test_guest_symbol_names import dynamic_tags, imported_symbols, module_symbols
 from test_windows_import_modules import executable
 
 ARGS = 0x1122334455667788
@@ -42,6 +42,17 @@ def args_module():
     return image
 
 
+def no_relocation_module():
+    image = args_module()
+    for position in range(0x2000, 0x2200, 16):
+        tag, _ = struct.unpack_from('<qQ', image, position)
+        if tag == 0:
+            break
+        if tag == 8:
+            struct.pack_into('<Q', image, position + 8, 0)
+    return image
+
+
 def main():
     if sys.argv[1] == '--load':
         import ctypes
@@ -70,6 +81,20 @@ def main():
         assert GETTER in imported_symbols(image), imported_symbols(image)
         assert SETTER in imported_symbols(image), imported_symbols(image)
         assert 'shared#guest' in module_symbols(image), module_symbols(image)
+        bare = work / 'bare'
+        bare_modules = bare / 'sce_module'
+        bare_modules.mkdir(parents=True)
+        (bare_modules / name).write_bytes(no_relocation_module())
+        bare_source = bare / 'input.elf'
+        bare_source.write_bytes(executable(name))
+        bare_result = subprocess.run([str(relinker), '--skip-syscall-check', str(bare_source), str(bare / 'output.elf')],
+                                     capture_output=True, text=True, timeout=30)
+        assert bare_result.returncode == 0, (bare_result.stdout, bare_result.stderr)
+        bare_image = (bare / 'app0' / 'sce_module' / (name + '.guest.prx')).read_bytes()
+        bare_imports = imported_symbols(bare_image)
+        assert GETTER in bare_imports, bare_imports
+        assert SETTER in bare_imports, bare_imports
+        assert dynamic_tags(bare_image).get(8) == 48, dynamic_tags(bare_image)
         if not native:
             print('Guest module argument tests passed: native execution skipped')
             return
