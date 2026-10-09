@@ -62,6 +62,18 @@ static void CheckTouchContact() {
     Pad::ReadState();
 }
 
+static void CheckUnreadPress() {
+    PadInputState press;
+    press.buttons = static_cast<std::uint32_t>(Pad::PadButton::Cross);
+    press.sticks[0] = 0;
+    PadPublishInput_nid_postfix(press);
+    PadPublishInput_nid_postfix(PadInputState{});
+    const auto tapped = Pad::ReadState();
+    Require((tapped.buttons & static_cast<std::uint32_t>(Pad::PadButton::Cross)) != 0 && tapped.left_stick_x == 0);
+    const auto released = Pad::ReadState();
+    Require(released.buttons == 0 && released.left_stick_x == 128);
+}
+
 static void CheckReadStateHandle(int handle) {
     PadData data{};
     Require(scePadReadState(0, &data) == PAD_ERROR_INVALID_HANDLE);
@@ -98,6 +110,7 @@ int main() {
     Require(scePadGetHandle(user, 2, 0) == handle);
     CheckTiltCorrection(handle);
     CheckTouchContact();
+    CheckUnreadPress();
     CheckReadStateHandle(handle);
     CheckRemoteController(handle);
     Require(scePadSetVibrationMode(handle, 1) == 0);
