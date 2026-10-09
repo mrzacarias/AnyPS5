@@ -572,6 +572,9 @@ std::uint64_t NullPixelProgramAddress() {
     return reinterpret_cast<std::uintptr_t>(NullPixelCode);
 }
 
+// The registered null pixel program, published once under the driver mutex.
+static std::weak_ptr<const ShaderSnapshot> NullPixelSnapshot;
+
 void Driver::ResolveGraphicsAbi(const Shader* vertex, const Shader* pixel, std::uint32_t primitiveType) {
     PerformanceContext timingContext(FrameTiming::Preparation());
     PerformanceTimer timing("Shader.ResolveGraphicsAbi");
@@ -626,6 +629,8 @@ void ResolvePreparedGraphics(const ShaderSnapshot& front, const std::shared_ptr<
         for (const auto& entry : prepared.fragments) {
             if (auto snapshot = entry.lock()) fragments.push_back(std::move(snapshot));
         }
+        // A rect-list draw that writes nothing runs the null pixel program (see DecodeGraphicsPrograms).
+        if (auto null = NullPixelSnapshot.lock(); null != nullptr && null.get() != &front && std::ranges::find(fragments, null) == fragments.end()) fragments.push_back(std::move(null));
     }
     for (const auto& pixel : fragments) {
         const auto& current = transaction.Read(front);
@@ -746,7 +751,9 @@ void Driver::RegisterShader(const Shader* shader) {
         nullState.context = null.registeredState->context;
         nullState.userConfig = null.registeredState->userConfig;
         null.prepared->entries = PrepareRegistered(null, *localDevice, nullState, true);
-        PublishRegisteredShader(shaders, std::make_shared<const ShaderSnapshot>(std::move(null)));
+        auto published = std::make_shared<const ShaderSnapshot>(std::move(null));
+        NullPixelSnapshot = published;
+        PublishRegisteredShader(shaders, published);
     }
     transaction.Commit();
 }
