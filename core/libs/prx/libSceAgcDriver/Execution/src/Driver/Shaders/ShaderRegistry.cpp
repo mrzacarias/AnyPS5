@@ -738,8 +738,8 @@ void Driver::RegisterShader(const Shader* shader) {
         nullRegisteredState.shader.emplace(0x008u, static_cast<std::uint32_t>(null.codeAddress >> 8u));
         nullRegisteredState.shader.emplace(0x009u, static_cast<std::uint32_t>(null.codeAddress >> 40u));
         nullRegisteredState.shader.emplace(0x00bu, 0u);
-        nullRegisteredState.context.emplace(0x1b3u, 0x2u);
-        nullRegisteredState.context.emplace(0x1b4u, 0x2u);
+        nullRegisteredState.context.insert_or_assign(0x1b3u, 0x2u);
+        nullRegisteredState.context.insert_or_assign(0x1b4u, 0x2u);
         null.registeredState = std::make_shared<const RegisteredShaderState>(std::move(nullRegisteredState));
         QueueState nullState{};
         nullState.shader = null.registeredState->shader;
