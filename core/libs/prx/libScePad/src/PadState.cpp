@@ -10,6 +10,10 @@
 namespace {
     std::mutex stateMutex;
     PadInputState state;
+    // Buttons and the strongest stick push published since the last read, so a press released
+    // before the title's next read is still reported once.
+    std::uint32_t unreadButtons = 0;
+    std::array<std::uint8_t, 4> unreadSticks{128, 128, 128, 128};
     PadOutputState output;
     std::uint64_t timestamp = 0;
     std::exception_ptr failure;
@@ -102,14 +106,21 @@ PadData Pad::ReadState() {
     if (failure) std::rethrow_exception(failure);
     if (!initialized) throw std::runtime_error("Pad: read before initialization");
     const std::uint64_t now = sceKernelGetProcessTime();
+    const auto buttons = state.buttons | unreadButtons;
+    auto sticks = state.sticks;
+    for (std::size_t axis = 0; axis < sticks.size(); ++axis) {
+        if (std::abs(unreadSticks[axis] - 128) > std::abs(sticks[axis] - 128)) sticks[axis] = unreadSticks[axis];
+    }
+    unreadButtons = 0;
+    unreadSticks = {128, 128, 128, 128};
     PadData data{};
-    data.buttons = state.buttons;
-    data.left_stick_x = state.sticks[0];
-    data.left_stick_y = state.sticks[1];
-    data.right_stick_x = state.sticks[2];
-    data.right_stick_y = state.sticks[3];
-    data.analog_buttons_l2 = std::max<std::uint8_t>(state.analogButtonsL2, (state.buttons & 0x100) != 0 ? 255 : 0);
-    data.analog_buttons_r2 = std::max<std::uint8_t>(state.analogButtonsR2, (state.buttons & 0x200) != 0 ? 255 : 0);
+    data.buttons = buttons;
+    data.left_stick_x = sticks[0];
+    data.left_stick_y = sticks[1];
+    data.right_stick_x = sticks[2];
+    data.right_stick_y = sticks[3];
+    data.analog_buttons_l2 = std::max<std::uint8_t>(state.analogButtonsL2, (buttons & 0x100) != 0 ? 255 : 0);
+    data.analog_buttons_r2 = std::max<std::uint8_t>(state.analogButtonsR2, (buttons & 0x200) != 0 ? 255 : 0);
 
     const bool live = state.hasMotion && output.motionEnabled;
     const std::array<float, 3> rest{0.0f, 9.80665f, 0.0f};
@@ -278,6 +289,10 @@ extern "C" void PadPublishInput_nid_postfix(const PadInputState& input) {
         state.touchLeft == input.touchLeft && state.touchRight == input.touchRight &&
         state.hasMotion == input.hasMotion && state.accel == input.accel && state.gyro == input.gyro &&
         state.touch == input.touch && state.deviceKind == input.deviceKind) return;
+    unreadButtons |= input.buttons;
+    for (std::size_t axis = 0; axis < unreadSticks.size(); ++axis) {
+        if (std::abs(input.sticks[axis] - 128) > std::abs(unreadSticks[axis] - 128)) unreadSticks[axis] = input.sticks[axis];
+    }
     state = input;
     timestamp = sceKernelGetProcessTime();
 }
