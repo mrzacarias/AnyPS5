@@ -748,6 +748,7 @@ std::uint32_t EmitBallot(SpirvValueEmitContext& ctx, const IrValue* predicate) {
 
 std::uint32_t EmitReadFirstLane(SpirvValueEmitContext& ctx, const IrValue& inst) {
     auto& state = ctx.state;
+    if (state.singleLaneWave) return ctx.Arg(inst, 0);
     const auto ballot = ctx.Ballot(inst.Argument(1));
     const auto low = state.module.AllocateId();
     const auto high = state.module.AllocateId();

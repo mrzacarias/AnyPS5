@@ -131,6 +131,7 @@ bool IsContinueTarget(const IrProgram& program, std::uint32_t block) {
 }
 
 std::uint32_t EmitWaveAny(SpirvEmitterState& state, std::uint32_t predicate) {
+    if (state.singleLaneWave) return predicate;
     const auto wave = EmitWaveBallot(state, EmitLaneBallot(state, predicate));
     const auto low = state.module.AllocateId();
     const auto high = state.module.AllocateId();

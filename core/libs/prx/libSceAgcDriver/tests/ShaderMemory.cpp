@@ -1998,6 +1998,35 @@ void verifyGuardedNullPointers() {
 #endif
 }
 
+void verifyVertexWithoutSubgroups() {
+    using namespace ShaderRecompiler;
+    // v_cmp_gt_u32 vcc, 4, v0; s_cbranch_vccz 1; v_mov_b32 v1, 1.0; exp pos0 v1, v1, v1, v1 done; s_endpgm
+    static constexpr std::array<std::uint32_t, 6> code{0x7d880084u, 0xbf860001u, 0x7e0202f2u, 0xf80008cfu, 0x01010101u, 0xbf810000u};
+    const auto subgroupCapabilities = [](std::uint32_t supportedStages) {
+        RecompileRequest request{};
+        request.shader = {ShaderStage::Vertex, 0x10000u, code, 0, {}};
+        request.context.waveSize = 64;
+        request.context.vertex = ShaderVertexStageInfo{};
+        request.target.vulkanVersion = 0x00401000u;
+        request.target.spirvVersion = 0x00010300u;
+        request.target.subgroupSize = 8;
+        request.target.subgroupSupportedStages = supportedStages;
+        request.layout.pushConstantSizeBytes = 128;
+        request.useCache = false;
+        const auto words = Recompile(request).spirv;
+        std::uint32_t count = 0;
+        for (std::size_t cursor = 5; cursor < words.size() && (words[cursor] >> 16u) != 0u; cursor += words[cursor] >> 16u) {
+            const auto op = words[cursor] & 0xffffu;
+            if (op == spv::OpCapability && words[cursor + 1u] >= spv::CapabilityGroupNonUniform && words[cursor + 1u] <= spv::CapabilityGroupNonUniformQuad) ++count;
+            if (op >= spv::OpGroupNonUniformElect && op <= spv::OpGroupNonUniformQuadSwap) ++count;
+        }
+        return count;
+    };
+    require(subgroupCapabilities(~0u) != 0u, "vertex subgroups: a wave-mask branch did not use subgroup operations");
+    // lavapipe: VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
+    require(subgroupCapabilities(0x30u) == 0u, "vertex subgroups: a vertex program used subgroup operations the host stage lacks");
+}
+
 int main(int argc, char** argv) {
     try {
         using namespace ShaderRecompiler;
@@ -2032,6 +2061,7 @@ int main(int argc, char** argv) {
         verifyBdaReadFallbackFunctions();
         verifyFunctionLdsBound();
         verifyGuardedNullPointers();
+        verifyVertexWithoutSubgroups();
 #if ANYPS5_ENABLE_SPIRV_TOOLS
         const std::vector<std::uint32_t> minimalSpirv{
             0x07230203u, 0x00010000u, 0u, 5u, 0u,
