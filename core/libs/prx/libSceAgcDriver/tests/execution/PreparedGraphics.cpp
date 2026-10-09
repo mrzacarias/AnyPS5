@@ -225,6 +225,21 @@ void Check(AgcDriver::VulkanDevice& device, AgcDriver::Graphics::ShaderPath path
         else ++request.context.userDataBaseRegister;
         Reject([&] { static_cast<void>(InvocationFor(*program.snapshot, program.codeOffset, request)); }, "artifact is missing");
     }
+    // A pixel program that writes nothing runs as the null program, which takes no user data even
+    // though RSRC2 still describes the program it replaces.
+    Fixture null;
+    null.Initialize(1u);
+    null.snapshot->codeAddress = NullPixelProgramAddress();
+    auto nullRegistry = registry;
+    nullRegistry.emplace(null.snapshot->codeAddress, null.snapshot);
+    auto skipped = queue;
+    skipped.context[0x8e] = 0u;
+    skipped.context[0x1c4] = 0u;
+    skipped.context[0x203] = 0u;
+    DrawDecode nullDraw{};
+    nullDraw.state = prepared.state;
+    DecodeGraphicsPrograms(nullDraw, skipped, nullRegistry, false, true);
+    Require(nullDraw.programs.back().binary.codeAddress == NullPixelProgramAddress() && nullDraw.programs.back().userData.empty(), "the null pixel program took the replaced program's user data");
     ShaderRegistry invalidRegistry;
     DrawDecode invalid{};
     invalid.state = prepared.state;
