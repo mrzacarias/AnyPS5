@@ -22,6 +22,18 @@ namespace {
     throw std::runtime_error("SPIR-V emission failed: hash=0x" + std::to_string(program.Resources().shaderHash) + " stage=" + std::to_string(static_cast<unsigned>(program.Resources().stage)) + " reason=" + reason);
 }
 
+// The VkShaderStageFlagBits of the host stage the program runs as.
+std::uint32_t HostStageBit(IrShaderStage stage) {
+    switch (ExecutionModelForStage(stage)) {
+    case spv::ExecutionModelVertex: return 0x1u;
+    case spv::ExecutionModelTessellationControl: return 0x2u;
+    case spv::ExecutionModelTessellationEvaluation: return 0x4u;
+    case spv::ExecutionModelFragment: return 0x10u;
+    case spv::ExecutionModelGLCompute: return 0x20u;
+    default: return 0x80u;
+    }
+}
+
 const ShaderWorkgroupInputInfo* ShaderWorkgroupInputFor(const SpirvEmitterState& state) {
     switch (state.program.Resources().stage) {
     case IrShaderStage::Compute:
@@ -116,6 +128,13 @@ std::uint32_t SpirvValueEmitContext::HalfArg(const IrValue& inst, std::size_t in
 
 std::uint32_t SpirvValueEmitContext::Ballot(const IrValue* predicate) {
     const auto ballotType = TypeU32Vector(state, 4u);
+    if (state.singleLaneWave) {
+        const auto bit = state.module.AllocateId();
+        const auto ballot = state.module.AllocateId();
+        state.module.AddFunction(spv::OpSelect, TypeU32(state), bit, Def(predicate), ConstantU32(state, 1u), ConstantU32(state, 0u));
+        state.module.AddFunction(spv::OpCompositeConstruct, ballotType, ballot, bit, ConstantU32(state, 0u), ConstantU32(state, 0u), ConstantU32(state, 0u));
+        return ballot;
+    }
     const auto low = EmitLaneBallot(state, otherHalf == nullptr || half == 0u ? Def(predicate) : otherHalf->Def(predicate));
     if (otherHalf == nullptr) {
         return EmitWaveBallot(state, low);
@@ -243,6 +262,15 @@ std::vector<std::uint32_t> SpirvEmitter::Emit(const IrProgram& program, const Sh
     state.hostSubgroupSize = target.subgroupSize;
     state.splitSubgroup = program.WaveSize() == 32u && target.subgroupSize > 32u;
     if (state.splitSubgroup && (state.requirements.subgroupBallot || state.requirements.subgroupShuffle)) state.requirements.subgroupLocalInvocationId = true;
+    // A host stage without subgroup operations (lavapipe vertex shaders) runs each invocation as
+    // a one-lane wave: ballots hold only lane 0, so exec masks and wave-mask branches stay per invocation.
+    state.singleLaneWave = (target.subgroupSupportedStages & HostStageBit(program.Resources().stage)) == 0u;
+    if (state.singleLaneWave) {
+        state.splitSubgroup = false;
+        state.requirements.subgroupBallot = false;
+        state.requirements.subgroupShuffle = false;
+        state.requirements.subgroupLocalInvocationId = false;
+    }
     const auto* workgroup = ShaderWorkgroupInputFor(state);
     state.laneCount = workgroup != nullptr && program.WaveSize() == 64u && workgroup->hostSubgroupSize == 32u ? 2u : 1u;
     if (state.laneCount == 2u) state.sharedLaneValues = WaveUniformValues(program);
