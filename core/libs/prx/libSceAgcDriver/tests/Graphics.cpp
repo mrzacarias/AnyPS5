@@ -740,6 +740,12 @@ void DepthStencilTests() {
     queue.context[0x200] = 0x007007f1;
     state = AgcDriver::Graphics::DecodeState(queue);
     Require(state.stencilBack.compareOp == VK_COMPARE_OP_ALWAYS && state.stencilBack.passOp == VK_STENCIL_OP_KEEP && state.stencilBack.writeMask == 0 && state.stencilBack.reference == 1, "back-face stencil state changed");
+    queue.context[0x000] = 2;
+    state = AgcDriver::Graphics::DecodeState(queue);
+    for (const auto& face : {state.stencilFront, state.stencilBack}) {
+        Require(state.stencilTest && face.compareOp == VK_COMPARE_OP_ALWAYS && face.failOp == VK_STENCIL_OP_REPLACE && face.passOp == VK_STENCIL_OP_REPLACE && face.depthFailOp == VK_STENCIL_OP_REPLACE && face.writeMask == 0xff && face.reference == 7, "a stencil clear draw did not write DB_STENCIL_CLEAR");
+    }
+    queue.context[0x000] = 0;
     queue.context[0x10b] = 0x40;
     queue.context[0x10c] = 0x05ffff02;
     queue.context[0x200] = 0x00200211;
