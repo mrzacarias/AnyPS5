@@ -142,6 +142,15 @@ constexpr int GuestMapFixedFlag = 0x10;
 
 #if defined(__linux__)
 void* MapAtOrAbove(std::uintptr_t start, size_t len, int prot, size_t alignment) {
+    if (GuestArena::GuestArenaAvailable_nid_postfix()) {
+        void* candidate = GuestArena::GuestArenaAllocateAtOrAbove_nid_postfix(start, len, alignment);
+        void* result = mmap(candidate, len, prot, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+        if (result == MAP_FAILED) {
+            GuestArena::GuestArenaRelease_nid_postfix(candidate, len);
+            throw std::system_error(errno, std::generic_category(), "Guest arena mmap failed");
+        }
+        return result;
+    }
     constexpr std::uintptr_t UserLimit = 0x7fff00000000ull;
     for (int attempt = 0; attempt < 8; ++attempt) {
         std::vector<std::pair<std::uintptr_t, std::uintptr_t>> used;
@@ -507,6 +516,15 @@ void* MapPlaced(void* addr, size_t len, int prot, int flags, size_t alignment) {
 #ifdef _WIN32
     return mmap_aligned(len, prot, alignment);
 #endif
+    if (GuestArena::GuestArenaAvailable_nid_postfix()) {
+        void* candidate = GuestArena::GuestArenaAllocate_nid_postfix(len, alignment);
+        void* result = mmap(candidate, len, prot, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+        if (result == MAP_FAILED) {
+            GuestArena::GuestArenaRelease_nid_postfix(candidate, len);
+            throw std::system_error(errno, std::generic_category(), "Guest arena mmap failed");
+        }
+        return result;
+    }
     if (len > std::numeric_limits<size_t>::max() - alignment) {
         throw std::overflow_error("Aligned mapping size overflow");
     }

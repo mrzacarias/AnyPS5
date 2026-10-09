@@ -2,6 +2,7 @@
 #include "prx/libc/include/WindowsMappings.hpp"
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <iterator>
@@ -14,6 +15,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <sys/mman.h>
 #endif
 
 namespace GuestArena {
@@ -135,6 +138,17 @@ private:
         for (const auto& [holeStart, holeEnd] : _holes) _used.emplace(holeStart, holeEnd);
         _base = ArenaStart;
         _end = end;
+#else
+        const std::uintptr_t end = ApplicationAreaEnd;
+        void* reservation = mmap(reinterpret_cast<void*>(ArenaStart), end - ArenaStart,
+                                 PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
+        if (reservation == MAP_FAILED) {
+            throw std::system_error(errno, std::generic_category(), "reserve the guest arena range");
+        }
+        _base = ArenaStart;
+        _end = end;
+        _holes.emplace_back(SystemReservedStart, SystemReservedEnd);
+        _used.emplace(SystemReservedStart, SystemReservedEnd);
 #endif
     }
 
