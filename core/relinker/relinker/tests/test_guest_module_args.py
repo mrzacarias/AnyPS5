@@ -36,7 +36,7 @@ def args_module():
     struct.pack_into('<II', image, 0x2500, 1, 3)
     struct.pack_into('<QQq', image, 0x2700, 0x2820, (1 << 32) | 6, 0)
     image[0x1000:0x1006] = b'\xb8\x2a\0\0\0\xc3'
-    code = b'\x48\x83\xec\x08\xff\x15' + struct.pack('<i', 0x2820 - 0x1016)
+    code = b'\x48\x83\xec\x08\xff\x15' + struct.pack('<i', 0x2820 - 0x101a)
     code += b'\x48\x83\xc4\x08\xb8' + struct.pack('<I', RETURNED) + b'\xc3'
     image[0x1010:0x1010 + len(code)] = code
     return image
@@ -63,7 +63,7 @@ def main():
         return
     relinker = Path(sys.argv[1]).resolve()
     host = Path(sys.argv[2]).resolve()
-    native = sys.platform == 'linux' and os.uname().machine == 'x86-64'
+    native = sys.platform == 'linux' and os.uname().machine == 'x86_64'
     with tempfile.TemporaryDirectory(prefix='anyps5-guest-args-') as directory:
         work = Path(directory)
         modules = work / 'sce_module'
@@ -102,10 +102,10 @@ def main():
         libraries.mkdir()
         shutil.copyfile(host, libraries / 'libc.prx')
         events = work / 'events.txt'
-        run = subprocess.run([sys.executable, __file__, '--load', str(host), str(converted)],
+        run = subprocess.run([sys.executable, __file__, '--load', str(libraries / 'libc.prx'), str(converted)],
                              env={**os.environ, 'ANYPS5_GUEST_MODULE_ARGS': str(events)},
                              capture_output=True, text=True, timeout=30)
-        assert run.returncode == 0, (run.stdout, run.stderr)
+        assert run.returncode == 0, (run.returncode, run.stdout, run.stderr)
         recorded = events.read_text()
         assert f'args={ARGS:016x} argp={ARGP:016x}' in recorded, recorded
         assert f'result={RETURNED}' in recorded, recorded
