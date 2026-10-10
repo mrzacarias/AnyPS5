@@ -48,7 +48,18 @@ static thread_local bool threadFinishing = false;
 static std::mutex stackLock;
 static std::map<PthreadPrivate*, std::pair<std::uintptr_t, std::uintptr_t>> liveStacks;
 
+#if defined(__APPLE__) && defined(__aarch64__)
+static bool (*guestStackLimits)(std::uintptr_t*, std::uintptr_t*) = nullptr;
+
+extern "C" void Aps5SetGuestStackLimits_nid_no_patch(bool (*query)(std::uintptr_t*, std::uintptr_t*)) {
+    guestStackLimits = query;
+}
+#endif
+
 static bool HostStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
+#if defined(__APPLE__) && defined(__aarch64__)
+    if (guestStackLimits != nullptr && guestStackLimits(low, high)) return *high > *low;
+#endif
 #ifdef _WIN32
     ULONG_PTR lowLimit = 0;
     ULONG_PTR highLimit = 0;

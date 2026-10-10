@@ -249,6 +249,8 @@ public:
     }
 
     ThreadState* Thread() const { return thread; }
+    void* Stack() const { return stack; }
+    std::size_t StackSize() const { return stackSize; }
 
 private:
     ThreadState* thread = nullptr;
@@ -278,6 +280,15 @@ ThreadState* CurrentThread() {
         currentThread = adoptedThread.thread->Thread();
     }
     return currentThread;
+}
+
+bool GuestStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
+    const auto* thread = CurrentThread();
+    const auto& adopted = adoptedThread.thread;
+    if (adopted == nullptr || adopted->Thread() != thread || adopted->Stack() == nullptr) return false;
+    *low = reinterpret_cast<std::uintptr_t>(adopted->Stack());
+    *high = *low + adopted->StackSize();
+    return true;
 }
 
 }
@@ -423,6 +434,8 @@ GuestCpu::GuestCpu(Bridge& bridge, const GuestProgram& program) {
     if (!state->context->InitCore()) throw std::runtime_error("FEXCore failed to initialise");
     guestCode = {program.CodeRanges(), &bridge, &program.Tls(), state->context.get()};
     InstallFaultHandler();
+    if (void* setStackLimits = bridge.HostSymbol("Aps5SetGuestStackLimits_nid_no_patch"))
+        reinterpret_cast<void (*)(bool (*)(std::uintptr_t*, std::uintptr_t*))>(setStackLimits)(GuestStackLimits);
 }
 
 GuestCpu::~GuestCpu() {
