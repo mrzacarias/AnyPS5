@@ -386,6 +386,7 @@ void DefineDescriptors(SpirvEmitterState& state) {
             const auto selected = std::ranges::find_if(modes, [&](const ImageResource& mode) { return DescriptorBindingForImage(mode) == binding.kind; });
             if (selected == modes.end()) FailEmit("static image heap has no runtime mode");
             const auto& image = *selected;
+            if (StorageMultisampleUnavailable(state, image)) break;
             const auto name = "image_" + std::to_string(static_cast<std::uint32_t>(binding.kind));
             state.imageVariables.at(ImageBindingIndex(binding.kind)) = Define(ArrayType(ImageType(state, image)), name.c_str(), spv::StorageClassUniformConstant);
             if (image.dimension == RdnaImageDimension::Dim1D || image.dimension == RdnaImageDimension::Dim1DArray) {

@@ -1584,6 +1584,11 @@ void EmitImage(SpirvValueEmitContext& ctx, const IrValue& inst) {
     std::vector<std::uint32_t> incoming;
     for (std::uint32_t index = 0u; index < modes.size(); ++index) {
         EmitLabel(state, labels[index]);
+        if (StorageMultisampleUnavailable(state, modes[index])) {
+            if (returnsValue) incoming.insert(incoming.end(), {state.module.Constant(spv::OpConstantNull, TypeId(state, inst.Type())), state.currentLabel});
+            state.module.AddFunction(spv::OpBranch, merge);
+            continue;
+        }
         std::uint32_t modeMerge = 0u;
         if (base.indirectRoot != ImageResource::NoIndirectImage) {
             const auto enabled = state.module.SpecializationConstant(TypeU32(state), PipelineSpecialization::ImageModeBase + memory.resource * PipelineSpecialization::ImageModeStride + index, 1u);
