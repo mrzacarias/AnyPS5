@@ -8,6 +8,10 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <psapi.h>
+#elif defined(__APPLE__)
+#include <dlfcn.h>
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
 #else
 #include <fstream>
 #endif
@@ -43,6 +47,27 @@ bool fillModuleInfoForUnwind(std::uint64_t addr, ModuleInfoForUnwind* info) {
     path[len] = '\0';
     std::strncpy(info->name, path, sizeof(info->name) - 1);
     info->name[sizeof(info->name) - 1] = '\0';
+    return true;
+#elif defined(__APPLE__)
+    mach_vm_address_t start = addr;
+    mach_vm_size_t size = 0;
+    vm_region_basic_info_data_64_t region{};
+    mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+    mach_port_t object = MACH_PORT_NULL;
+    if (mach_vm_region(mach_task_self(), &start, &size, VM_REGION_BASIC_INFO_64, reinterpret_cast<vm_region_info_t>(&region), &count, &object) != KERN_SUCCESS ||
+        start > addr) {
+        return false;
+    }
+    Dl_info image{};
+    const char* name = dladdr(reinterpret_cast<const void*>(addr), &image) && image.dli_fname != nullptr ? image.dli_fname : "";
+    info->st_size = sizeof(ModuleInfoForUnwind);
+    std::strncpy(info->name, name, sizeof(info->name) - 1);
+    info->name[sizeof(info->name) - 1] = '\0';
+    info->eh_frame_hdr_addr = 0;
+    info->eh_frame_addr = 0;
+    info->eh_frame_size = 0;
+    info->seg0_addr = start;
+    info->seg0_size = size;
     return true;
 #else
     std::ifstream maps("/proc/self/maps");
