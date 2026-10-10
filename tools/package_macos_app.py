@@ -85,6 +85,7 @@ def package(relinked, game, libs, vulkan, input_config, bundle):
 
     shutil.copy2(executable, macos / "eboot")
     (macos / "eboot").chmod(0o755)
+    (macos / "app0").symlink_to(Path("..") / "Resources" / "game" / "app0")
     libraries = sorted(libs.glob("*.prx"))
     if not libraries:
         raise RuntimeError(f"No prx libraries in {libs}")
