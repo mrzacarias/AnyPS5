@@ -1,6 +1,9 @@
 """Packages a title relinked with `relinker --macos` as a macOS application bundle.
 
-    python3 tools/package_macos_app.py --relinked <dir> [--game <dir>] --libs <dir> --vulkan <dir> [--input-config <file>] <Title.app>
+    python3 tools/package_macos_app.py --relinked <dir> [--game <dir>] --libs <dir> --vulkan <dir> [--input-config <file>] [--fex <aps5-fex>] <Title.app>
+
+With --fex, the bundle runs the relinker's Linux output (app.elf in --relinked) through the given aps5-fex
+runner on arm64, with arm64 libraries in --libs.
 
 --relinked is the relinker's output directory: the executable (eboot) and the app0/sce_module guest
 modules it wrote. --game is the title's own folder (sce_sys and its data), copied as app0 under the
@@ -35,7 +38,7 @@ mkdir -p "$ANYPS5_SHADER_CACHE_DIR" "$HOME/Library/Logs/AnyPS5" "$saves"
 cd "$here/../Resources/game" || exit 1
 if [ -d _sd ] && [ ! -L _sd ]; then cp -Rp _sd/. "$saves/" && rm -rf _sd; fi
 ln -sfn "$saves" _sd
-exec "$here/eboot" "$@" >> "$HOME/Library/Logs/AnyPS5/{title_id}.log" 2>&1
+exec {command} "$@" >> "$HOME/Library/Logs/AnyPS5/{title_id}.log" 2>&1
 """
 
 
@@ -64,8 +67,8 @@ def make_icon(png, resources):
     return "AppIcon"
 
 
-def package(relinked, game, libs, vulkan, input_config, bundle):
-    executable = relinked / "eboot"
+def package(relinked, game, libs, vulkan, input_config, bundle, fex=None):
+    executable = relinked / ("app.elf" if fex is not None else "eboot")
     if not executable.is_file():
         raise RuntimeError(f"No relinked executable: {executable}")
     if bundle.suffix != ".app":
@@ -87,8 +90,14 @@ def package(relinked, game, libs, vulkan, input_config, bundle):
     title_id, name, version = title_metadata(app0)
     identifier = "org.anyps5." + "".join(character for character in title_id.lower() if character.isalnum())
 
-    shutil.copy2(executable, macos / "eboot")
-    (macos / "eboot").chmod(0o755)
+    if fex is not None:
+        shutil.copy2(executable, macos / "app.elf")
+        shutil.copy2(fex, macos / "aps5-fex")
+        (macos / "aps5-fex").chmod(0o755)
+        identifier += ".fex"
+    else:
+        shutil.copy2(executable, macos / "eboot")
+        (macos / "eboot").chmod(0o755)
     (macos / "app0").symlink_to(Path("..") / "Resources" / "game" / "app0")
     libraries = sorted(libs.glob("*.prx"))
     if not libraries:
@@ -110,7 +119,7 @@ def package(relinked, game, libs, vulkan, input_config, bundle):
         shutil.copy2(input_config, resources / "anyps5-input.ini")
 
     launcher = macos / "launch"
-    launcher.write_text(LAUNCHER.format(identifier=identifier, title_id=title_id))
+    launcher.write_text(LAUNCHER.format(identifier=identifier, title_id=title_id, command='"$here/aps5-fex" "$here/app.elf"' if fex is not None else '"$here/eboot"'))
     launcher.chmod(0o755)
     icon = make_icon(app0 / "sce_sys" / "icon0.png", resources)
     info = {
@@ -139,9 +148,10 @@ def main():
     parser.add_argument("--libs", required=True, type=Path)
     parser.add_argument("--vulkan", required=True, type=Path)
     parser.add_argument("--input-config", type=Path)
+    parser.add_argument("--fex", type=Path)
     parser.add_argument("bundle", type=Path)
     arguments = parser.parse_args()
-    name, identifier = package(arguments.relinked, arguments.game, arguments.libs, arguments.vulkan, arguments.input_config, arguments.bundle)
+    name, identifier = package(arguments.relinked, arguments.game, arguments.libs, arguments.vulkan, arguments.input_config, arguments.bundle, arguments.fex)
     print(f"{arguments.bundle}: {name} ({identifier})")
 
 
