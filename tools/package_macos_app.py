@@ -15,7 +15,8 @@ The bundle runs without the SDK or environment variables:
     Contents/Resources/game/app0    the title's files
     Contents/Resources/vulkan/icd.d MoltenVK's driver manifest
 
-The shader cache goes to ~/Library/Caches/<bundle id> and the output to ~/Library/Logs/AnyPS5."""
+The shader cache goes to ~/Library/Caches/<bundle id>, the output to ~/Library/Logs/AnyPS5 and the
+save data to ~/Library/Application Support/AnyPS5/<title id>, so repackaging keeps it."""
 import argparse
 import json
 import plistlib
@@ -29,8 +30,11 @@ LAUNCHER = """#!/bin/sh
 here="$(cd "$(dirname "$0")" && pwd)"
 export VK_DRIVER_FILES="${{VK_DRIVER_FILES:-$here/../Resources/vulkan/icd.d/MoltenVK_icd.json}}"
 export ANYPS5_SHADER_CACHE_DIR="${{ANYPS5_SHADER_CACHE_DIR:-$HOME/Library/Caches/{identifier}/shader_cache}}"
-mkdir -p "$ANYPS5_SHADER_CACHE_DIR" "$HOME/Library/Logs/AnyPS5"
+saves="$HOME/Library/Application Support/AnyPS5/{title_id}/_sd"
+mkdir -p "$ANYPS5_SHADER_CACHE_DIR" "$HOME/Library/Logs/AnyPS5" "$saves"
 cd "$here/../Resources/game" || exit 1
+if [ -d _sd ] && [ ! -L _sd ]; then cp -Rp _sd/. "$saves/" && rm -rf _sd; fi
+ln -sfn "$saves" _sd
 exec "$here/eboot" "$@" >> "$HOME/Library/Logs/AnyPS5/{title_id}.log" 2>&1
 """
 
