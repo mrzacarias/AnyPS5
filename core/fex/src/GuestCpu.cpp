@@ -326,7 +326,9 @@ void CallGuest(ThreadState* thread, std::uint64_t target, Aps5GuestCallFrame* fr
     state.gregs[REG_R9] = frame->gpr[5];
     std::memcpy(state.xmm.sse.data, frame->vector, sizeof(frame->vector));
     ++guestDepth;
+    const bool native = SetInNativeCall(false);
     thread->CTX->HandleCallback(thread, target);
+    SetInNativeCall(native);
     --guestDepth;
     frame->gpr[0] = state.gregs[REG_RAX];
     frame->gpr[1] = state.gregs[REG_RDX];

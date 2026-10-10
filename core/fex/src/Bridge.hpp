@@ -19,6 +19,8 @@ namespace Aps5Fex {
 
 class GuestImage;
 
+bool SetInNativeCall(bool value);
+
 class Bridge {
 public:
     explicit Bridge(std::filesystem::path libraries);

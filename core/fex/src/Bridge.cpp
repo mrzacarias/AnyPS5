@@ -8,12 +8,17 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <exception>
+#include <mutex>
+#include <pthread.h>
+#include <unordered_map>
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <stdexcept>
@@ -85,6 +90,84 @@ void CaptureGuestFrame(std::uintptr_t* registers) {
     registers[7] = currentCall->block + BlockSize + 8;
     registers[16] = *reinterpret_cast<const std::uint64_t*>(currentCall->block + BlockSize);
 }
+
+constexpr int InterruptSignal = SIGUSR2;
+
+using Delivery = void (*)(const std::uint64_t* registers, void* data);
+
+struct PendingDelivery {
+    Delivery deliver;
+    void* data;
+};
+
+struct InterruptQueue {
+    std::mutex lock;
+    std::vector<PendingDelivery> pending;
+    std::atomic<bool> hasPending {false};
+};
+
+std::mutex queuesMutex;
+std::unordered_map<pthread_t, InterruptQueue*> interruptQueues;
+
+struct InterruptRegistration {
+    InterruptQueue queue;
+
+    InterruptRegistration() {
+        std::lock_guard lock(queuesMutex);
+        interruptQueues[pthread_self()] = &queue;
+    }
+
+    ~InterruptRegistration() {
+        std::lock_guard lock(queuesMutex);
+        interruptQueues.erase(pthread_self());
+    }
+};
+
+thread_local InterruptRegistration interruptRegistration;
+thread_local std::atomic<bool> inNativeCall {false};
+void DeliverInterrupts() {
+    auto& queue = interruptRegistration.queue;
+    if (currentCall == nullptr) return;
+    while (queue.hasPending.load()) {
+        const bool native = inNativeCall.exchange(false);
+        std::vector<PendingDelivery> work;
+        {
+            std::lock_guard lock(queue.lock);
+            work.swap(queue.pending);
+            queue.hasPending.store(false);
+        }
+        std::uintptr_t frame[17];
+        CaptureGuestFrame(frame);
+        const std::uint64_t registers[18] {frame[0], frame[2],  frame[1],  frame[3],  frame[7],  frame[6],  frame[4],  frame[5], frame[8],
+                                           frame[9], frame[10], frame[11], frame[12], frame[13], frame[14], frame[15], frame[16], 0x202};
+        for (const auto& delivery : work) delivery.deliver(registers, delivery.data);
+        inNativeCall.store(native);
+    }
+}
+
+void OnInterrupt(int) {
+    if (inNativeCall.load()) DeliverInterrupts();
+}
+
+bool RaiseOnThread(pthread_t target, Delivery deliver, void* data) {
+    {
+        std::lock_guard lock(queuesMutex);
+        const auto found = interruptQueues.find(target);
+        if (found == interruptQueues.end()) return false;
+        std::lock_guard queueLock(found->second->lock);
+        found->second->pending.push_back({deliver, data});
+        found->second->hasPending.store(true);
+    }
+    return pthread_kill(target, InterruptSignal) == 0;
+}
+
+struct NativeCallScope {
+    NativeCallScope() {
+        inNativeCall.store(true);
+        DeliverInterrupts();
+    }
+    ~NativeCallScope() { inNativeCall.store(false); }
+};
 
 struct GuestFrame {
     std::uintptr_t registers[17];
@@ -274,6 +357,14 @@ void Bridge::Connect() {
         reinterpret_cast<SetFiberBridge>(setFiber)(CaptureGuestFrame, ResumeGuestFrame, GuestControl,
                                                    AddStub(reinterpret_cast<void*>(&FiberEntryReturned), "fiber entry return"));
     }
+    if (void* setInterrupt = HostSymbol("Aps5SetGuestInterrupt_nid_no_patch")) {
+        struct sigaction action {};
+        action.sa_handler = OnInterrupt;
+        action.sa_flags = SA_RESTART;
+        sigemptyset(&action.sa_mask);
+        sigaction(InterruptSignal, &action, nullptr);
+        reinterpret_cast<void (*)(bool (*)(pthread_t, Delivery, void*))>(setInterrupt)(RaiseOnThread);
+    }
 }
 
 void Bridge::Register(const GuestImage& image, const std::string& name) {
@@ -351,6 +442,10 @@ std::uint64_t Bridge::Resolve(const std::string& name, bool weak) {
     return guest;
 }
 
+bool SetInNativeCall(bool value) {
+    return inNativeCall.exchange(value);
+}
+
 std::uint64_t Bridge::Call(FEXCore::Core::CPUState& state, std::uint64_t number, std::uint64_t block) {
     const std::uint64_t rip = state.rip;
     state.rip = rip + 2;
@@ -401,6 +496,7 @@ std::uint64_t Bridge::Call(FEXCore::Core::CPUState& state, std::uint64_t number,
     const GuestCall call {&state, block, currentCall};
     currentCall = &call;
     try {
+        const NativeCallScope native;
         Aps5NativeCall(function.address, &arguments, &result);
     } catch (const GuestFrame& frame) {
         currentCall = call.outer;

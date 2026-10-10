@@ -317,6 +317,52 @@ asm(".text\n"
     "    jmp *%r8\n");
 #endif
 
+#if defined(__APPLE__) && defined(__aarch64__)
+namespace {
+
+using GuestDelivery = void (*)(const std::uint64_t* registers, void* data);
+using GuestInterrupt = bool (*)(pthread_t target, GuestDelivery deliver, void* data);
+
+GuestInterrupt guestInterrupt = nullptr;
+
+struct Raise {
+    GuestExceptionHandler handler;
+    int signum;
+};
+
+void DeliverRaise(const std::uint64_t* registers, void* data) {
+    const std::unique_ptr<Raise> raise(static_cast<Raise*>(data));
+    GuestUcontext ucontext{};
+    auto& m = ucontext.mcontext;
+    m.rax = registers[0];
+    m.rcx = registers[1];
+    m.rdx = registers[2];
+    m.rbx = registers[3];
+    m.rsp = registers[4];
+    m.rbp = registers[5];
+    m.rsi = registers[6];
+    m.rdi = registers[7];
+    m.r8 = registers[8];
+    m.r9 = registers[9];
+    m.r10 = registers[10];
+    m.r11 = registers[11];
+    m.r12 = registers[12];
+    m.r13 = registers[13];
+    m.r14 = registers[14];
+    m.r15 = registers[15];
+    m.rip = registers[16];
+    m.rflags = registers[17];
+    m.len = sizeof(GuestMcontext);
+    raise->handler(raise->signum, &ucontext);
+}
+
+}
+
+extern "C" void Aps5SetGuestInterrupt_nid_no_patch(GuestInterrupt interrupt) {
+    guestInterrupt = interrupt;
+}
+#endif
+
 extern "C" {
 
 int APS5_VABI sceKernelInstallExceptionHandler(int signum, void* handler) {
@@ -341,6 +387,12 @@ int APS5_VABI sceKernelRaiseException(Pthread thread, int signum) {
  if (handler == nullptr) throw std::runtime_error("sceKernelRaiseException: no handler installed for the signal");
 #ifdef _WIN32
  return RaiseOn(thread, handler, signum) ? 0 : SCE_KERNEL_ERROR_ESRCH;
+#elif defined(__APPLE__) && defined(__aarch64__)
+ if (guestInterrupt == nullptr) NotImplemented_nid_no_patch(__func__);
+ auto raise = std::make_unique<Raise>(Raise{handler, signum});
+ if (!guestInterrupt(thread->hostThread, DeliverRaise, raise.get())) return SCE_KERNEL_ERROR_ESRCH;
+ (void)raise.release();
+ return 0;
 #else
  NotImplemented_nid_no_patch(__func__);
  return 0;
