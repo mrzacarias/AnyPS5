@@ -8,6 +8,7 @@
 #include <string>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/specifics/linux/ElfTypes.hpp"
 #include "prx/libkernel/Pthread/include/ThreadLifecycle.hpp"
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -39,8 +40,26 @@ const void* imageContaining(const void* address, bool reference, void*& handle, 
     return module;
 #elif defined(__APPLE__)
     Dl_info info{};
-    if (!dladdr(address, &info) || !info.dli_fbase)
-        throw std::runtime_error(std::string(caller) + ": address outside every loaded image");
+    if (!dladdr(address, &info) || !info.dli_fbase) {
+        struct Search {
+            std::uintptr_t address;
+            const void* image;
+        } search {reinterpret_cast<std::uintptr_t>(address), nullptr};
+        dl_iterate_phdr([](dl_phdr_info* image, std::size_t, void* data) {
+            auto& search = *static_cast<Search*>(data);
+            for (std::uint16_t index = 0; index < image->dlpi_phnum; ++index) {
+                const auto& header = image->dlpi_phdr[index];
+                const auto start = image->dlpi_addr + header.p_vaddr;
+                if (header.p_type == PT_LOAD && search.address >= start && search.address - start < header.p_memsz) {
+                    search.image = image->dlpi_phdr;
+                    return 1;
+                }
+            }
+            return 0;
+        }, &search);
+        if (!search.image) throw std::runtime_error(std::string(caller) + ": address outside every loaded image");
+        return search.image;
+    }
     if (reference && info.dli_fname && *info.dli_fname) {
         handle = dlopen(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
         if (!handle) throw std::runtime_error(std::string(caller) + ": cannot reference " + info.dli_fname);
