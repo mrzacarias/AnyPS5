@@ -19,7 +19,7 @@
 #include <fstream>
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 namespace {
 std::uint64_t ReadEncoded(const std::uint8_t*& p, std::uint8_t encoding) {
   const auto application = encoding & 0x70;
@@ -36,6 +36,7 @@ std::uint64_t ReadEncoded(const std::uint8_t*& p, std::uint8_t encoding) {
   return value;
 }
 
+#ifdef _WIN32
 void FillGuestUnwindInfo(const std::uint8_t* base, ModuleInfoForUnwind* info) {
   const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
   if (dos->e_magic != IMAGE_DOS_SIGNATURE) throw std::runtime_error("sceKernelGetModuleInfoForUnwind: image without a DOS header");
@@ -69,6 +70,7 @@ void FillGuestUnwindInfo(const std::uint8_t* base, ModuleInfoForUnwind* info) {
     return;
   }
 }
+#endif
 }
 #endif
 
@@ -137,6 +139,21 @@ int APS5_VABI sceKernelGetModuleInfoForUnwind(uint64_t addr, int flags, ModuleIn
     info->eh_frame_hdr_addr = frames != nullptr ? image->dlpi_addr + frames->p_vaddr : 0;
     info->eh_frame_addr = 0;
     info->eh_frame_size = 0;
+    if (frames != nullptr) {
+      const auto* header = reinterpret_cast<const std::uint8_t*>(info->eh_frame_hdr_addr);
+      if (header[0] != 1) NotImplemented_nid_no_patch("sceKernelGetModuleInfoForUnwind eh_frame_hdr version other than 1");
+      const auto* p = header + 4;
+      const auto* record = reinterpret_cast<const std::uint8_t*>(ReadEncoded(p, header[1]));
+      info->eh_frame_addr = reinterpret_cast<std::uint64_t>(record);
+      for (;;) {
+        std::uint32_t length = 0;
+        std::memcpy(&length, record, 4);
+        if (length == 0) break;
+        if (length == 0xffffffffu) NotImplemented_nid_no_patch("sceKernelGetModuleInfoForUnwind eh_frame record with a 64-bit length");
+        record += 4 + length;
+      }
+      info->eh_frame_size = reinterpret_cast<std::uint64_t>(record) + 4 - info->eh_frame_addr;
+    }
     info->seg0_addr = image->dlpi_addr + first->p_vaddr;
     info->seg0_size = first->p_memsz;
     search.found = true;
