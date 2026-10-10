@@ -1,6 +1,7 @@
 #ifndef CORE_FEX_SRC_BRIDGE_HPP
 #define CORE_FEX_SRC_BRIDGE_HPP
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -62,6 +63,7 @@ private:
         Variadic variadic;
         std::uint8_t fixed;
         bool x87Result;
+        std::array<std::uint8_t, 4> stackSizes;
     };
 
     static constexpr std::size_t StubBytes = 16;
@@ -72,7 +74,7 @@ private:
     static constexpr std::uint32_t FirstStub = 0x41500000;
 
     std::uint64_t AddStub(void* address, const std::string& name, Variadic variadic = Variadic::None, std::uint8_t fixed = 0,
-                          bool x87Result = false);
+                          bool x87Result = false, std::array<std::uint8_t, 4> stackSizes = {});
 
     std::filesystem::path directory;
     std::vector<void*> handles;

@@ -250,6 +250,18 @@ constexpr VariadicExport VariadicExports[] = {
 
 constexpr std::string_view X87Results[] = {"strtold_nid_postfix", "wcstold_nid_postfix"};
 
+struct PackedExport {
+    std::string_view name;
+    std::array<std::uint8_t, 4> sizes;
+};
+
+constexpr PackedExport PackedExports[] = {
+    {"sceAgcAcbDmaData", {1, 1}},
+    {"sceAgcCbBranch", {4, 1, 8, 4}},
+    {"sceAgcCbReleaseMem", {2, 2, 1, 4}},
+    {"sceAgcDcbDmaData", {4, 1, 1, 1}},
+};
+
 template <std::size_t... Sizes>
 constexpr std::array<std::uint8_t, (Sizes + ...)> Join(const std::array<std::uint8_t, Sizes>&... parts) {
     std::array<std::uint8_t, (Sizes + ...)> joined {};
@@ -386,7 +398,8 @@ std::uint64_t Bridge::TlsGetAddrStub() {
     return tlsGetAddrStub;
 }
 
-std::uint64_t Bridge::AddStub(void* address, const std::string& name, Variadic variadic, std::uint8_t fixed, bool x87Result) {
+std::uint64_t Bridge::AddStub(void* address, const std::string& name, Variadic variadic, std::uint8_t fixed, bool x87Result,
+                              std::array<std::uint8_t, 4> stackSizes) {
     if (FirstStubOffset + (functions.size() + 1) * StubBytes > StubSize()) throw std::runtime_error("too many imported functions");
     const auto number = static_cast<std::uint32_t>(FirstStub + functions.size());
     std::uint8_t* stub = stubs + FirstStubOffset + functions.size() * StubBytes;
@@ -397,7 +410,7 @@ std::uint64_t Bridge::AddStub(void* address, const std::string& name, Variadic v
         static_cast<std::uint8_t>(jump >> 16), static_cast<std::uint8_t>(jump >> 24)};
     std::memset(stub, 0xcc, StubBytes);
     std::memcpy(stub, code, sizeof(code));
-    functions.push_back({address, name, variadic, fixed, x87Result});
+    functions.push_back({address, name, variadic, fixed, x87Result, stackSizes});
     return reinterpret_cast<std::uint64_t>(stub);
 }
 
@@ -430,7 +443,10 @@ std::uint64_t Bridge::Resolve(const std::string& name, bool weak) {
             }
             const bool x87Result = info.dli_sname != nullptr && info.dli_saddr == address &&
                 std::find(std::begin(X87Results), std::end(X87Results), info.dli_sname) != std::end(X87Results);
-            guest = AddStub(address, name, variadic, fixed, x87Result);
+            std::array<std::uint8_t, 4> stackSizes {};
+            for (const auto& entry : PackedExports)
+                if (info.dli_sname != nullptr && entry.name == info.dli_sname && info.dli_saddr == address) stackSizes = entry.sizes;
+            guest = AddStub(address, name, variadic, fixed, x87Result, stackSizes);
         }
         resolved.emplace(name, guest);
         return guest;
@@ -477,6 +493,18 @@ std::uint64_t Bridge::Call(FEXCore::Core::CPUState& state, std::uint64_t number,
         StackArgumentSlots,
     };
     std::memcpy(arguments.vector, reinterpret_cast<const void*>(block + BlockVectors), sizeof(arguments.vector));
+    std::uint64_t packedSlots[StackArgumentSlots] {};
+    if (function.stackSizes[0] != 0) {
+        auto* packed = reinterpret_cast<std::uint8_t*>(packedSlots);
+        std::size_t offset = 0;
+        for (std::size_t i = 0; i < function.stackSizes.size() && function.stackSizes[i] != 0; ++i) {
+            const std::size_t size = function.stackSizes[i];
+            offset = (offset + size - 1) & ~(size - 1);
+            std::memcpy(packed + offset, stack + 2 + i, size);
+            offset += size;
+        }
+        arguments.stack = packedSlots;
+    }
     VaList list {static_cast<std::uint32_t>(8 * function.fixed), 48, guestStack, registers};
     std::uint64_t variadicSlots[6 + StackArgumentSlots];
     switch (function.variadic) {
