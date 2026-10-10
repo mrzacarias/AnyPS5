@@ -13,6 +13,7 @@ const ShaderVertexInputInfo& VertexInfo(const SpirvEmitterState& state);
 const ShaderPixelInputInfo& PixelInfo(const SpirvEmitterState& state);
 const ShaderWorkgroupInputInfo* ShaderWorkgroupInput(const SpirvEmitterState& state);
 const RdnaImageDimensionInfo& RdnaImageDimensionInfoFor(RdnaImageDimension dimension);
+bool StorageMultisampleUnavailable(const SpirvEmitterState& state, const ImageResource& mode);
 std::uint32_t TypeVoid(SpirvEmitterState& state);
 std::uint32_t TypeBool(SpirvEmitterState& state);
 std::uint32_t TypeBoolVector(SpirvEmitterState& state, std::uint32_t components);

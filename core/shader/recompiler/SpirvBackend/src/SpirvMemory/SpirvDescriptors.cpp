@@ -267,6 +267,10 @@ void EmitStorageImageWrite(SpirvEmitterState& state, std::uint32_t resource, std
     EmitLabel(state, mergeLabel);
 }
 
+bool StorageMultisampleUnavailable(const SpirvEmitterState& state, const ImageResource& mode) {
+    return mode.resourceClass == ImageResourceClass::Storage && RdnaImageDimensionInfoFor(mode.dimension).multisampled != 0u && std::ranges::find(state.supportedCapabilities, spv::CapabilityStorageImageMultisample) == state.supportedCapabilities.end();
+}
+
 const RdnaImageDimensionInfo& RdnaImageDimensionInfoFor(RdnaImageDimension dimension) {
     for (const auto& info : ImageDimensions) {
         if (info.dimension == dimension) {
