@@ -89,7 +89,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
     std::map<std::filesystem::path, GuestImage> discovered;
     const auto matchesIdentity = [](const std::string& name, const std::vector<std::string>& identities) {
         return std::any_of(identities.begin(), identities.end(), [&](const auto& identity) {
-            return name == identity || name == identity + ".prx" || name == identity + ".sprx" || name == identity + ".suprx";
+            return name == identity || (name.starts_with(identity + ".") && name.ends_with("prx"));
         });
     };
     const auto foldFilename = [](std::string name) {
