@@ -12,13 +12,31 @@
 #include <dlfcn.h>
 #include <link.h>
 #include <unistd.h>
+#elif defined(__APPLE__)
+#include "prx/libc/include/specifics/linux/ElfTypes.hpp"
+#include <mach-o/dyld.h>
 #endif
 
 extern "C" std::int32_t ModuleIdForImage_nid_no_patch(const void* native);
 
 namespace {
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#ifndef _WIN32
+#ifdef __APPLE__
+constexpr std::uint32_t PT_DYNAMIC = 2;
+constexpr std::uint32_t PT_TLS = 7;
+constexpr std::int64_t DT_NULL = 0;
+constexpr std::int64_t DT_INIT = 12;
+constexpr std::int64_t DT_FINI = 13;
+struct DynamicEntry {
+    std::int64_t d_tag;
+    union {
+        std::uint64_t d_ptr;
+    } d_un;
+};
+#else
+using DynamicEntry = ElfW(Dyn);
+#endif
 constexpr char GuestModuleSuffix[] = ".guest.prx";
 constexpr std::int32_t ProtRead = 1;
 constexpr std::int32_t ProtWrite = 2;
@@ -28,6 +46,7 @@ struct ImageSearch {
     std::uintptr_t address;
     ModuleInfoEx* info;
     bool found;
+    const void* image = nullptr;
 };
 
 bool Contains(const dl_phdr_info& image, std::uintptr_t begin, std::uint64_t size) {
@@ -101,9 +120,15 @@ std::string ImageName(const dl_phdr_info& image) {
     std::string path = image.dlpi_name ? image.dlpi_name : "";
     if (path.empty()) {
         char executable[4096];
+#ifdef __APPLE__
+        std::uint32_t size = sizeof(executable);
+        if (_NSGetExecutablePath(executable, &size) != 0) throw std::runtime_error("sceKernelGetModuleInfoFromAddr: cannot resolve the executable path");
+        path = executable;
+#else
         const auto length = ::readlink("/proc/self/exe", executable, sizeof(executable) - 1);
         if (length < 0) throw std::runtime_error("sceKernelGetModuleInfoFromAddr: cannot resolve the executable path");
         path.assign(executable, static_cast<std::size_t>(length));
+#endif
     }
     std::string name = path.substr(path.find_last_of('/') + 1);
     if (name.size() > sizeof(GuestModuleSuffix) - 1 && name.ends_with(GuestModuleSuffix))
@@ -116,7 +141,9 @@ void Fill(const dl_phdr_info& image, ModuleInfoEx& info) {
     if (name.size() >= sizeof(info.name))
         throw std::runtime_error("sceKernelGetModuleInfoFromAddr: module name too long: " + name);
     std::memcpy(info.name, name.c_str(), name.size() + 1);
+#ifndef __APPLE__
     info.tls_index = ToU32(image.dlpi_tls_modid, "TLS module index");
+#endif
     for (std::uint16_t i = 0; i < image.dlpi_phnum; ++i) {
         const auto& header = image.dlpi_phdr[i];
         const std::uintptr_t address = image.dlpi_addr + header.p_vaddr;
@@ -136,7 +163,7 @@ void Fill(const dl_phdr_info& image, ModuleInfoEx& info) {
             info.eh_frame_addr = EhFrameAddress(image, address);
             info.eh_frame_size = ToU32(EhFrameSize(image, info.eh_frame_addr), "eh_frame size");
         } else if (header.p_type == PT_DYNAMIC) {
-            for (const auto* entry = reinterpret_cast<const ElfW(Dyn)*>(address); entry->d_tag != DT_NULL; ++entry) {
+            for (const auto* entry = reinterpret_cast<const DynamicEntry*>(address); entry->d_tag != DT_NULL; ++entry) {
                 if (entry->d_tag == DT_INIT) info.init_proc_addr = image.dlpi_addr + entry->d_un.d_ptr;
                 else if (entry->d_tag == DT_FINI) info.fini_proc_addr = image.dlpi_addr + entry->d_un.d_ptr;
             }
@@ -150,6 +177,7 @@ int FindImage(dl_phdr_info* image, std::size_t, void* data) {
     if (!Contains(*image, search.address, 1)) return 0;
     Fill(*image, *search.info);
     search.found = true;
+    search.image = image->dlpi_phdr;
     return 1;
 }
 #endif
@@ -163,9 +191,18 @@ int APS5_VABI sceKernelGetModuleInfoFromAddr(std::uint64_t address, int flags, M
     if (flags != 2) throw std::invalid_argument("sceKernelGetModuleInfoFromAddr: unsupported flags " + std::to_string(flags));
     if (info->st_size != sizeof(ModuleInfoEx))
         throw std::invalid_argument("sceKernelGetModuleInfoFromAddr: unsupported st_size " + std::to_string(info->st_size));
-#if defined(_WIN32) || defined(__APPLE__)
+#ifdef _WIN32
     (void)address;
     NotImplemented_nid_no_patch(__func__);
+    return 0;
+#elif defined(__APPLE__)
+    ModuleInfoEx result{};
+    result.st_size = sizeof(ModuleInfoEx);
+    ImageSearch search{static_cast<std::uintptr_t>(address), &result, false};
+    dl_iterate_phdr(FindImage, &search);
+    if (!search.found) return SCE_KERNEL_ERROR_ESRCH;
+    result.id = ModuleIdForImage_nid_no_patch(search.image);
+    *info = result;
     return 0;
 #else
     Dl_info symbol{};
