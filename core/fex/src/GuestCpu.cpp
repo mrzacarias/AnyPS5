@@ -11,6 +11,7 @@
 #include <FEXCore/Debug/InternalThreadState.h>
 #include <FEXCore/HLE/SyscallHandler.h>
 #include <FEXCore/Utils/AllocatorHooks.h>
+#include <FEXCore/Utils/ArchHelpers/Arm64.h>
 #include <FEXCore/Utils/DualMap.h>
 #include <FEXCore/Utils/LogManager.h>
 
@@ -353,6 +354,13 @@ struct sigaction previousBus {}, previousSegv {};
 void OnFault(int signal, siginfo_t* info, void* context) {
     auto* machine = static_cast<ucontext_t*>(context)->uc_mcontext;
     const std::uint64_t pc = arm_thread_state64_get_pc(machine->__ss);
+    if (signal == SIGBUS && info->si_code == BUS_ADRALN && currentThread != nullptr && guestCode.context != nullptr && guestCode.context->IsAddressInCodeBuffer(currentThread, pc)) {
+        const auto moved = FEXCore::ArchHelpers::Arm64::HandleUnalignedAccess(currentThread, FEXCore::ArchHelpers::Arm64::UnalignedHandlerType::HalfBarrier, pc, &machine->__ss.__x[0]);
+        if (moved.has_value()) {
+            arm_thread_state64_set_pc_fptr(machine->__ss, reinterpret_cast<void*>(pc + *moved));
+            return;
+        }
+    }
     if (IsGuestCode(pc) && reinterpret_cast<std::uint64_t>(info->si_addr) == pc) {
         machine->__ss.__x[16] = pc;
         arm_thread_state64_set_pc_fptr(machine->__ss, &Aps5GuestCallEntry);
