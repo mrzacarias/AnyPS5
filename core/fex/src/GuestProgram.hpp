@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -35,11 +36,14 @@ public:
     std::vector<std::uint64_t> Initializers() const;
     const GuestTlsLayout& Tls() const { return tls; }
     std::vector<std::pair<std::uint64_t, std::uint64_t>> CodeRanges() const;
+    void StartDeferred(std::size_t index);
 
 private:
     void Load(const std::filesystem::path& path, Bridge& bridge);
 
     std::vector<std::unique_ptr<GuestImage>> images;
+    std::vector<std::set<std::size_t>> providers;
+    std::vector<bool> deferred;
     GuestTlsLayout tls;
 };
 

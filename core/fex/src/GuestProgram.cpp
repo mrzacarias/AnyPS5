@@ -1,8 +1,10 @@
 #include "GuestProgram.hpp"
 
 #include "Bridge.hpp"
+#include "GuestCpu.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <stdexcept>
 #include <string_view>
 
@@ -18,14 +20,18 @@ std::uint64_t AlignUp(std::uint64_t value, std::uint64_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
 }
 
-const GuestProgram* loadedProgram = nullptr;
+GuestProgram* loadedProgram = nullptr;
 
 void* OpenGuestModule(const char* path) {
     std::error_code error;
     const auto canonical = std::filesystem::weakly_canonical(path, error);
     if (error) return nullptr;
-    for (const auto& image : loadedProgram->Images())
-        if (image->Path() == canonical) return image.get();
+    const auto& images = loadedProgram->Images();
+    for (std::size_t index = 0; index < images.size(); ++index) {
+        if (images[index]->Path() != canonical) continue;
+        loadedProgram->StartDeferred(index);
+        return images[index].get();
+    }
     return nullptr;
 }
 
@@ -56,12 +62,17 @@ GuestProgram::GuestProgram(const std::filesystem::path& executable, Bridge& brid
     tls.size = offset;
     bridge.SetTlsOffsets(offsets);
 
-    for (const auto& image : images) {
-        image->Relocate([&](const std::string& name, bool weak) -> std::optional<GuestSymbol> {
+    providers.resize(images.size());
+    for (std::size_t index = 0; index < images.size(); ++index) {
+        images[index]->Relocate([&](const std::string& name, bool weak) -> std::optional<GuestSymbol> {
             if (name == "__tls_get_addr") return GuestSymbol {bridge.TlsGetAddrStub()};
             if (name.ends_with(GuestSuffix)) {
-                for (const auto& provider : images)
-                    if (const auto symbol = provider->Export(name)) return symbol;
+                for (std::size_t provider = 0; provider < images.size(); ++provider) {
+                    if (const auto symbol = images[provider]->Export(name)) {
+                        if (provider != index) providers[index].insert(provider);
+                        return symbol;
+                    }
+                }
                 return std::nullopt;
             }
             const std::uint64_t address = bridge.Resolve(name, weak);
@@ -69,6 +80,17 @@ GuestProgram::GuestProgram(const std::filesystem::path& executable, Bridge& brid
             return GuestSymbol {address};
         });
     }
+    deferred.assign(images.size(), true);
+    std::vector<std::size_t> pending {0};
+    while (!pending.empty()) {
+        const auto index = pending.back();
+        pending.pop_back();
+        if (!deferred[index]) continue;
+        deferred[index] = false;
+        pending.insert(pending.end(), providers[index].begin(), providers[index].end());
+    }
+    for (std::size_t index = 1; index < images.size(); ++index)
+        if (deferred[index]) std::fprintf(stderr, "[aps5-fex] %s starts when the title loads it\n", images[index]->Path().filename().c_str());
     bridge.Connect();
     if (auto* setLoader = bridge.HostSymbol("Aps5SetGuestLoader_nid_no_patch")) {
         loadedProgram = this;
@@ -93,10 +115,19 @@ void GuestProgram::Load(const std::filesystem::path& path, Bridge& bridge) {
 std::vector<std::uint64_t> GuestProgram::Initializers() const {
     std::vector<std::uint64_t> functions;
     for (std::size_t index = 1; index < images.size(); ++index) {
+        if (deferred[index]) continue;
         const auto initializers = images[index]->Initializers();
         functions.insert(functions.end(), initializers.begin(), initializers.end());
     }
     return functions;
+}
+
+void GuestProgram::StartDeferred(std::size_t index) {
+    if (!deferred[index]) return;
+    deferred[index] = false;
+    for (const auto provider : providers[index]) StartDeferred(provider);
+    const std::uint64_t arguments[6] {};
+    for (const auto initializer : images[index]->Initializers()) CallGuestFunction(initializer, arguments);
 }
 
 std::vector<std::pair<std::uint64_t, std::uint64_t>> GuestProgram::CodeRanges() const {
