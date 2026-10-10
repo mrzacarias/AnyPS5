@@ -2832,6 +2832,15 @@ int main() {
             auto unrestricted = context;
             unrestricted.depthRangeUnrestricted = true;
             AgcDriver::Graphics::ValidateDepthBounds(unrestricted, bounded);
+            auto deep = state;
+            deep.viewport.minDepth = -1.0f;
+            deep.depth.reset();
+            AgcDriver::Graphics::ValidateViewport(context, deep);
+            Require(AgcDriver::Graphics::HostViewport(context, deep).minDepth == 0.0f, "a viewport depth no draw reads was not clamped into [0, 1]");
+            deep.depth = AgcDriver::Graphics::DepthTarget{};
+            deep.depthTest = true;
+            expectFailure([&] { AgcDriver::Graphics::ValidateViewport(context, deep); }, "viewport depth outside [0, 1]");
+            Require(AgcDriver::Graphics::HostViewport(unrestricted, deep).minDepth == -1.0f, "an unrestricted depth range was clamped");
         }
         RunGuestLeaseWaitTests();
         stateTests();
