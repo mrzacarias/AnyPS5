@@ -27,9 +27,6 @@
 #include <string>
 #include <sys/mman.h>
 #include <unistd.h>
-#elif defined(__APPLE__)
-#include <sys/mman.h>
-#include <unistd.h>
 #endif
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -843,13 +840,8 @@ static void CheckReadsIntoSharedWriteTracking() {
 #endif
 }
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
 using PageRuns = std::vector<std::pair<std::uintptr_t, std::uintptr_t>>;
-
-// The write watch reports whole host pages: 4 KiB on Linux, 16 KiB on Apple silicon.
-static std::size_t WatchPage() {
-    return static_cast<std::size_t>(getpagesize());
-}
 
 static bool CollectRuns(const void* base, std::size_t offset, std::size_t bytes, PageRuns& runs) {
     runs.clear();
@@ -857,8 +849,8 @@ static bool CollectRuns(const void* base, std::size_t offset, std::size_t bytes,
     std::pair<std::uintptr_t, PageRuns*> context{address, &runs};
     return GuestWriteWatch::GuestWriteWatchCollect_nid_postfix(address + offset, bytes, [](void* context, std::uintptr_t begin, std::uintptr_t end) {
         auto& [origin, into] = *static_cast<std::pair<std::uintptr_t, PageRuns*>*>(context);
-        if (!into->empty() && into->back().second == (begin - origin) / WatchPage()) into->back().second = (end - origin) / WatchPage();
-        else into->emplace_back((begin - origin) / WatchPage(), (end - origin) / WatchPage());
+        if (!into->empty() && into->back().second == (begin - origin) / 4096) into->back().second = (end - origin) / 4096;
+        else into->emplace_back((begin - origin) / 4096, (end - origin) / 4096);
     }, &context);
 }
 
@@ -878,7 +870,7 @@ static void CheckWriteWatch() {
         return;
     }
     constexpr std::size_t length = 0x100000;
-    const std::size_t small = WatchPage();
+    constexpr std::size_t small = 4096;
     void* mapping = nullptr;
     Require(sceKernelMapFlexibleMemory(&mapping, length, 3, 0) == 0);
     auto* bytes = static_cast<volatile unsigned char*>(mapping);
@@ -903,10 +895,7 @@ static void CheckWriteWatch() {
     int pipe[2];
     Require(::pipe(pipe) == 0);
     Require(::write(pipe[1], "kernel", 6) == 6);
-    {
-        const GuestArena::HostWrite destination(const_cast<unsigned char*>(bytes + 20 * small + 8), 6);
-        Require(::read(pipe[0], const_cast<unsigned char*>(bytes + 20 * small + 8), 6) == 6);
-    }
+    Require(::read(pipe[0], const_cast<unsigned char*>(bytes + 20 * small + 8), 6) == 6);
     ::close(pipe[0]);
     ::close(pipe[1]);
     Require(bytes[20 * small + 8] == 'k' && Written(mapping, length, {{20, 21}}));
@@ -928,10 +917,10 @@ static void CheckWriteWatch() {
     void* fixed = middle;
     Require(sceKernelMapFlexibleMemory(&fixed, guestPage, 3, 0x10) == 0 && fixed == middle);
     Require(GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(address, length));
-    Require(Written(mapping, length, {{4 * guestPage / small, 5 * guestPage / small}}));
+    Require(Written(mapping, length, {{16, 20}}));
     Require(Written(mapping, length, {}));
     middle[1] = 1;
-    Require(Written(mapping, length, {{4 * guestPage / small, 4 * guestPage / small + 1}}));
+    Require(Written(mapping, length, {{16, 17}}));
     Require(sceKernelMunmap(mapping, length) == 0);
     Require(!GuestWriteWatch::GuestWriteWatchCovers_nid_postfix(address, small));
     constexpr std::size_t tableSpan = 0x200000;
@@ -952,7 +941,6 @@ static void CheckWriteWatch() {
     Require(munmap(raw, spanned + tableSpan) == 0);
 }
 
-#if defined(__linux__)
 static std::string BackingOf(const void* address) {
     std::ifstream maps("/proc/self/maps");
     std::string line;
@@ -1023,15 +1011,13 @@ static void CheckDirectMemorySharedBacking() {
     Require(sceKernelReleaseDirectMemory(phys, page * 3) == 0);
 }
 
-#endif
-
 static void CheckDirectMemoryWriteWatch() {
     if (!GuestWriteWatch::GuestWriteWatchAvailable_nid_postfix()) {
         std::puts("write watch unavailable: direct memory not tested");
         return;
     }
     constexpr std::size_t page = 0x4000;
-    const std::size_t small = WatchPage();
+    constexpr std::size_t small = 4096;
     std::int64_t phys = 0;
     Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page * 3, 0, 0, &phys) == 0);
     void* first = nullptr;
@@ -1102,11 +1088,9 @@ int main() {
     CheckSharedWriteTracking();
     CheckReadsIntoSharedWriteTracking();
     CheckPinnedSharedPages();
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
     CheckWriteWatch();
     CheckDirectMemoryWriteWatch();
-#endif
-#if defined(__linux__)
     CheckDirectMemoryBackingNeedsNoFilesystem();
     CheckDirectMemorySharedBacking();
 #endif
