@@ -1,5 +1,7 @@
 #include <cstdlib>
 #include <array>
+#include <chrono>
+#include <future>
 #include <thread>
 #ifdef _WIN32
 #include <windows.h>
@@ -28,7 +30,9 @@ int main() {
         for (auto& worker : workers) {
             worker = std::thread([] { TouchHostThreadLocal(); TouchHostThreadLocal(); });
         }
-        for (auto& worker : workers) worker.join();
+        for (auto& worker : workers) worker.get();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (DestroyedHostThreadLocals() < before + 8 && std::chrono::steady_clock::now() < deadline) std::this_thread::sleep_for(std::chrono::milliseconds(1));
         if (DestroyedHostThreadLocals() != before + 8) std::abort();
     }
 

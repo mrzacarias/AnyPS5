@@ -80,7 +80,11 @@ static void WaitComparesALongAndWaitUintAnInt() {
 
     auto* low = reinterpret_cast<std::uint32_t*>(&value);
     Require(FailsWith(Umtx(low, UMTX_OP_WAIT_UINT, 1, nullptr, &none), GUEST_ETIMEDOUT));
-    Require(FailsWith(Umtx(low, UMTX_OP_WAIT_UINT_PRIVATE, 0x700000001ULL, nullptr, &none), GUEST_ETIMEDOUT));
+    Require(Umtx(low, UMTX_OP_WAIT_UINT_PRIVATE, 0x700000001ULL, nullptr, &none) == 0);
+    Require(Umtx(low, UMTX_OP_WAIT_UINT, 0x700000001ULL, nullptr, &none) == 0);
+    std::uint32_t all = 0xffffffffu;
+    Require(Umtx(&all, UMTX_OP_WAIT_UINT, 0xffffffffffffffffULL, nullptr, &none) == 0);
+    Require(FailsWith(Umtx(&all, UMTX_OP_WAIT_UINT, 0xffffffffULL, nullptr, &none), GUEST_ETIMEDOUT));
 }
 
 static void TimesOutWhileTheValueMatches() {
@@ -118,9 +122,19 @@ static void TimesOutWhileTheValueMatches() {
 static void RejectsAnInvalidTimeout() {
     std::uint32_t word = 1;
     KernelTimespec negative{-1, 0};
-    Require(FailsWith(Umtx(&word, UMTX_OP_WAIT_UINT, 1, nullptr, &negative), GUEST_EINVAL));
+    Require(FailsWith(Umtx(&word, UMTX_OP_WAIT_UINT, 1, SizeOf(sizeof(negative)), &negative), GUEST_EINVAL));
     KernelTimespec tooManyNanos{0, 1000000000};
-    Require(FailsWith(Umtx(&word, UMTX_OP_WAIT_UINT, 1, nullptr, &tooManyNanos), GUEST_EINVAL));
+    Require(FailsWith(Umtx(&word, UMTX_OP_WAIT_UINT, 1, SizeOf(sizeof(tooManyNanos)), &tooManyNanos), GUEST_EINVAL));
+    for (const int operation : {UMTX_OP_WAIT, UMTX_OP_WAIT_UINT}) {
+        bool threw = false;
+        try { Umtx(&word, operation, 1, nullptr, &tooManyNanos); }
+        catch (const std::runtime_error&) { threw = true; }
+        Require(threw);
+        threw = false;
+        try { Umtx(&word, operation, 1, nullptr, &negative); }
+        catch (const std::runtime_error&) { threw = true; }
+        Require(threw);
+    }
     UmtxTime negativeNanos{{0, -1}, 0, CLOCK_MONOTONIC_ID};
     Require(FailsWith(Umtx(&word, UMTX_OP_WAIT_UINT, 1, SizeOf(sizeof(negativeNanos)), &negativeNanos), GUEST_EINVAL));
 }
@@ -205,11 +219,14 @@ static void RejectsBadObjectsAndOperations() {
 
     std::uint64_t value = 0;
     Require(FailsWith(Umtx(&value, 0, 0), GUEST_EOPNOTSUPP));
-    Require(FailsWith(Umtx(&value, 1, 0), GUEST_EOPNOTSUPP));
     Require(FailsWith(Umtx(&value, UMTX_OP_MAX, 0), GUEST_EINVAL));
     Require(FailsWith(Umtx(&value, -1, 0), GUEST_EINVAL));
 
     bool threw = false;
+    try { Umtx(&value, 1, 0); }
+    catch (const std::runtime_error&) { threw = true; }
+    Require(threw);
+    threw = false;
     try { Umtx(&value, UMTX_OP_MUTEX_LOCK, 0); }
     catch (const std::runtime_error&) { threw = true; }
     Require(threw);

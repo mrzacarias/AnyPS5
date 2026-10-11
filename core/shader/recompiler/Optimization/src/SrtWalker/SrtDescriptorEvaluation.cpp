@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <string>
+#include <utility>
 
 namespace ShaderRecompiler::Detail {
 
@@ -44,7 +45,7 @@ const DescriptorSource* Source(const IrResourcePlan& program, std::uint32_t sour
 
 }
 
-bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const std::uint32_t> sources, const SrtRuntime& runtime, std::vector<DescriptorValue>& results, std::vector<std::uint32_t>& flat, bool evaluateFlat, std::span<const std::uint8_t> cleanFlatSlots, std::vector<std::uint8_t>& activeSources, std::vector<SrtReadPoison>* poison) {
+bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const std::uint32_t> sources, const SrtRuntime& runtime, std::vector<DescriptorValue>& results, std::vector<std::uint32_t>& flat, bool evaluateFlat, std::span<const std::uint8_t> cleanFlatSlots, std::vector<std::uint8_t>& activeSources, std::vector<SrtReadPoison>* poison, std::uint32_t* nullRootReads) {
     failureReason().clear();
     static const bool debug = std::getenv("APS5_SRT_DEBUG") != nullptr;
     if (debug) {
@@ -92,6 +93,17 @@ bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const s
             }
         }
     }
+    InaccessibleRead inaccessible;
+    std::uint32_t nullRoots = 0;
+    if (evaluateFlat && poison != nullptr) {
+        evaluator.ReportInaccessibleReads(&inaccessible);
+        cleanEvaluator.ReportInaccessibleReads(&inaccessible);
+        if (nullRootReads != nullptr) {
+            evaluator.ReportNullRootReads(&nullRoots);
+            cleanEvaluator.ReportNullRootReads(&nullRoots);
+        }
+    }
+    std::vector<std::pair<std::uint32_t, InaccessibleRead>> zeroedSources;
     std::vector<DescriptorValue> evaluated;
     evaluated.reserve(sources.size());
     for (const auto sourceIndex : sources) {
@@ -103,7 +115,14 @@ bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const s
         value.dwordCount = source->dwordCount;
         if (!evaluateFlat || active[sourceIndex]) {
             for (std::uint32_t index = 0; index < source->dwordCount; index++) {
+                inaccessible = {};
                 if (!evaluator.Evaluate(source->dwords[index], value.dwords[index])) {
+                    if (inaccessible.read != nullptr) {
+                        if (debug) std::fprintf(stderr, "[srt] descriptor source %u reads inaccessible 0x%llx at pc 0x%x: zero words\n", sourceIndex, static_cast<unsigned long long>(inaccessible.address), inaccessible.read->Flags<MemoryFlags>().pc);
+                        value.dwords.fill(0u);
+                        zeroedSources.emplace_back(sourceIndex, inaccessible);
+                        break;
+                    }
                     std::string detail = DescribeValue(source->dwords[index], 4);
                     const IrValue* dword = source->dwords[index]->Resolve();
                     if (dword->Opcode() == IrOpcode::ReadConst && dword->ArgumentCount() == 2 && dword->Argument(1)->Resolve()->HasImmediate()) {
@@ -120,11 +139,6 @@ bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const s
     std::vector<SrtReadPoison> poisoned;
     if (evaluateFlat) {
         flattened.resize(program.srtReads.size());
-        InaccessibleRead inaccessible;
-        if (poison != nullptr) {
-            evaluator.ReportInaccessibleReads(&inaccessible);
-            cleanEvaluator.ReportInaccessibleReads(&inaccessible);
-        }
         for (const auto& read : program.srtReads) {
             const bool clean = read.flatOffset < cleanFlatSlots.size() && cleanFlatSlots[read.flatOffset] != 0u;
             auto& selected = clean ? cleanEvaluator : evaluator;
@@ -150,6 +164,14 @@ bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const s
                 return Fail(std::string(clean ? "clean " : "") + "SRT read at flat offset " + std::to_string(read.flatOffset) + ": " + DescribeValue(read.value, 4));
             }
         }
+        for (const auto& [sourceIndex, read] : zeroedSources) {
+            const auto pc = read.read->Flags<MemoryFlags>().pc;
+            if (std::none_of(poisoned.begin(), poisoned.end(), [&](const SrtReadPoison& entry) { return entry.pc == pc && entry.address == read.address; })) {
+                char address[64];
+                std::snprintf(address, sizeof(address), "0x%llx at pc 0x%x", static_cast<unsigned long long>(read.address), pc);
+                return Fail("descriptor source " + std::to_string(sourceIndex) + " reads inaccessible " + address + ", which no flat SRT slot records");
+            }
+        }
     }
     results = std::move(evaluated);
     activeSources = std::move(active);
@@ -158,6 +180,10 @@ bool EvaluateRuntimeSourcesImpl(const IrResourcePlan& program, std::span<const s
     }
     if (poison != nullptr) {
         *poison = std::move(poisoned);
+    }
+    if (nullRootReads != nullptr) {
+        if (debug && nullRoots != 0u) std::fprintf(stderr, "[srt] %u reads through a null user-data pointer: zero words\n", nullRoots);
+        *nullRootReads = nullRoots;
     }
     return true;
 }

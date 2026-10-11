@@ -20,12 +20,6 @@ std::string DynamicName(const Relinker::GuestImage& guest, const std::size_t ind
 
 }
 
-// A bundled guest module as a Mach-O dylib. Its relocations are resolved the way the Windows writer
-// resolves them, except that dyld does the binding: imports are flat-namespace binds, so the guest
-// modules the executable loads first win over the prx libraries, as in ELF symbol lookup. Each module
-// keeps its own static TLS block and thread pointer (see MacOsImage.cpp). An exported TLS variable is a
-// TLS index other modules reach with general-dynamic access; initial-exec access to another module's
-// TLS is not supported, as on Windows.
 std::vector<std::uint8_t> GuestModuleWriter::WriteMacOs(const Relinker::GuestImage& guest, const std::vector<std::string>& dependencies, const std::string& runPath) const {
     using namespace MacOs;
     Windows::WindowsLoadImage image(guest.Bytes, guest.Headers, false);
@@ -79,14 +73,14 @@ std::vector<std::uint8_t> GuestModuleWriter::WriteMacOs(const Relinker::GuestIma
                 image.WritePointer(target, symbol.Value + addend - GuestTlsBlockSize(*tls));
             } else if (type == 1 || type == 6 || type == 7) {
                 if (symbolIndex == 0 || (type != 1 && addend != 0) || tlsSymbol) throw Domain::RelinkerException("Invalid guest symbol relocation", target);
-                if (!imported) {
+                if (symbol.Section == Relinker::AbsoluteSection) image.WritePointer(target, symbol.Value + addend);
+                else if (!imported) {
                     if (symbol.Section >= 0xff00) throw Domain::RelinkerException("Unsupported special guest symbol section", target);
                     image.WritePointer(target, image.GetRelocatedAddress(symbol.Value) + addend);
                     input.Rebases.push_back(rva);
                 } else {
                     if (symbol.Name.empty()) throw Domain::RelinkerException("Empty guest import", target);
                     image.WritePointer(target, 0);
-                    // __tls_get_addr comes from libkernel unless a guest module provides one.
                     const auto name = guest.UsePlatformTlsResolver && symbol.Name == "vNe1w4diLCs" ? std::string("Aps5GuestTlsGetAddr_nid_no_patch") : DynamicName(guest, symbolIndex);
                     input.Binds.push_back({"_" + name, rva, static_cast<std::int64_t>(addend)});
                 }
@@ -98,7 +92,7 @@ std::vector<std::uint8_t> GuestModuleWriter::WriteMacOs(const Relinker::GuestIma
 
     for (std::size_t index = 1; index < guest.Symbols.size(); ++index) {
         const auto& symbol = guest.Symbols[index];
-        if (symbol.Section == 0 || (symbol.Info >> 4) == 0 || symbol.Visibility == 1 || symbol.Visibility == 2) continue;
+        if (symbol.Section == 0 || symbol.Section == Relinker::AbsoluteSection || (symbol.Info >> 4) == 0 || symbol.Visibility == 1 || symbol.Visibility == 2) continue;
         if (symbol.Section >= 0xff00) throw Domain::RelinkerException("Unsupported guest export section: " + symbol.Name);
         const auto name = "_" + DynamicName(guest, index);
         if ((symbol.Info & 15) == 6) {

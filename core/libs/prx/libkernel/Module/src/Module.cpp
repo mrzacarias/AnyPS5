@@ -8,6 +8,8 @@
 #include "prx/libc/include/specifics/linux/ElfTypes.hpp"
 #include "prx/libkernel/DirectMemory/DirectMemory.hpp"
 #include "prx/libkernel/KernelErrors.hpp"
+#include "prx/libkernel/Module/EhFrame.hpp"
+#include "prx/libkernel/Module/ModuleArgs.hpp"
 #ifdef _WIN32
 #include <windows.h>
 #include <psapi.h>
@@ -16,10 +18,11 @@
 #include <mach-o/getsect.h>
 #include <mach-o/loader.h>
 #else
-#include <fstream>
+#include <string_view>
+#include "prx/libc/include/specifics/linux/HostMapping.hpp"
 #endif
 
-#if defined(_WIN32) || defined(__APPLE__)
+#ifdef __APPLE__
 namespace {
 std::uint64_t ReadEncoded(const std::uint8_t*& p, std::uint8_t encoding) {
   const auto application = encoding & 0x70;
@@ -35,42 +38,63 @@ std::uint64_t ReadEncoded(const std::uint8_t*& p, std::uint8_t encoding) {
   if (application == 0x10) value += reinterpret_cast<std::uint64_t>(at);
   return value;
 }
+}
+#endif
 
 #ifdef _WIN32
+namespace {
 void FillGuestUnwindInfo(const std::uint8_t* base, ModuleInfoForUnwind* info) {
   const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
   if (dos->e_magic != IMAGE_DOS_SIGNATURE) throw std::runtime_error("sceKernelGetModuleInfoForUnwind: image without a DOS header");
   const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
   if (nt->Signature != IMAGE_NT_SIGNATURE) throw std::runtime_error("sceKernelGetModuleInfoForUnwind: image without an NT header");
-  const auto* sections = IMAGE_FIRST_SECTION(nt);
-  for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
-    if (std::memcmp(sections[i].Name, ".ehmeta", 8) != 0) continue;
-    std::uint32_t rva = 0;
-    std::memcpy(&rva, base + sections[i].VirtualAddress, 4);
-    const auto* header = base + rva;
-    if (header[0] != 1) NotImplemented_nid_no_patch("sceKernelGetModuleInfoForUnwind eh_frame_hdr version other than 1");
-    const auto* p = header + 4;
-    const auto frames = ReadEncoded(p, header[1]);
-    const auto* record = reinterpret_cast<const std::uint8_t*>(frames);
-    const auto* end = base + nt->OptionalHeader.SizeOfImage;
-    if (record < base || record >= end) throw std::runtime_error("sceKernelGetModuleInfoForUnwind: eh_frame_ptr outside the image");
-    for (;;) {
-      if (record + 4 > end) throw std::runtime_error("sceKernelGetModuleInfoForUnwind: eh_frame has no terminator inside the image");
-      std::uint32_t length = 0;
-      std::memcpy(&length, record, 4);
-      if (length == 0) break;
-      if (length == 0xffffffffu) NotImplemented_nid_no_patch("sceKernelGetModuleInfoForUnwind eh_frame record with a 64-bit length");
-      record += 4 + length;
-    }
-    info->eh_frame_hdr_addr = reinterpret_cast<std::uint64_t>(header);
-    info->eh_frame_addr = frames;
-    info->eh_frame_size = static_cast<std::uint64_t>(record - reinterpret_cast<const std::uint8_t*>(frames));
-    info->seg0_addr = reinterpret_cast<std::uint64_t>(base);
-    info->seg0_size = nt->OptionalHeader.SizeOfImage;
-    return;
-  }
+  EhFrame::Tables tables;
+  if (!EhFrame::ReadEhmeta(reinterpret_cast<std::uintptr_t>(base), *nt, "sceKernelGetModuleInfoForUnwind", tables)) return;
+  info->eh_frame_hdr_addr = tables.header;
+  info->eh_frame_addr = tables.frames;
+  info->eh_frame_size = tables.framesSize;
+  info->seg0_addr = reinterpret_cast<std::uint64_t>(base);
+  info->seg0_size = nt->OptionalHeader.SizeOfImage;
 }
-#endif
+}
+#elif !defined(__APPLE__)
+extern "C" int APS5_VABI sceKernelGetModuleInfoFromAddr(std::uint64_t address, int flags, ModuleInfoEx* info);
+
+namespace {
+struct ImageSearch {
+  std::uint64_t address;
+  bool relinked;
+};
+
+int FindRelinkedImage(dl_phdr_info* image, std::size_t, void* data) {
+  auto& search = *static_cast<ImageSearch*>(data);
+  bool contains = false;
+  for (std::uint16_t index = 0; index < image->dlpi_phnum; ++index) {
+    const auto& header = image->dlpi_phdr[index];
+    const auto start = image->dlpi_addr + header.p_vaddr;
+    if (header.p_type == PT_LOAD && search.address >= start && search.address - start < header.p_memsz) contains = true;
+  }
+  if (!contains) return 0;
+  const std::string_view name = image->dlpi_name != nullptr ? image->dlpi_name : "";
+  search.relinked = name.empty() || name.ends_with(".guest.prx");
+  return 1;
+}
+
+bool IsRelinkedImage(std::uint64_t address) {
+  ImageSearch search{address, false};
+  dl_iterate_phdr(FindRelinkedImage, &search);
+  return search.relinked;
+}
+
+void FillGuestUnwindInfo(std::uint64_t address, ModuleInfoForUnwind* info) {
+  ModuleInfoEx module{};
+  module.st_size = sizeof(ModuleInfoEx);
+  if (sceKernelGetModuleInfoFromAddr(address, 2, &module) != 0)
+    throw std::runtime_error("sceKernelGetModuleInfoForUnwind: failed to query guest module information");
+  info->eh_frame_hdr_addr = module.eh_frame_hdr_addr;
+  info->eh_frame_addr = module.eh_frame_addr;
+  info->eh_frame_size = module.eh_frame_size;
+}
 }
 #endif
 
@@ -88,7 +112,9 @@ extern "C" {
 
 int APS5_VABI sceKernelDlsym(KernelModule handle, const char* symbol, void** addr) {
  if (!symbol || !addr) return SCE_KERNEL_ERROR_EFAULT;
- void* found = dlsym_nid_postfix(reinterpret_cast<void*>(static_cast<intptr_t>(handle)), symbol);
+ void* module = handle == 0 ? dlopen_nid_postfix(nullptr, kRtldNow) : reinterpret_cast<void*>(static_cast<intptr_t>(handle));
+ void* found = dlsym_nid_postfix(module, symbol);
+ if (handle == 0 && module) dlclose_nid_postfix(module);
  if (!found) return SCE_KERNEL_ERROR_ESRCH;
  *addr = found;
  return 0;
@@ -174,42 +200,23 @@ int APS5_VABI sceKernelGetModuleInfoForUnwind(uint64_t addr, int flags, ModuleIn
   info->seg0_size = textSize;
   return 0;
 #else
-  std::ifstream maps("/proc/self/maps");
-  if (!maps) throw std::runtime_error("sceKernelGetModuleInfoForUnwind: failed to open /proc/self/maps");
-  std::string line;
-  while (std::getline(maps, line)) {
-    std::uint64_t start = 0;
-    std::uint64_t end = 0;
-    char perms[8] = {};
-    std::uint64_t offset = 0;
-    unsigned int devMajor = 0;
-    unsigned int devMinor = 0;
-    std::uint64_t inode = 0;
-    char path[4096] = {};
-    int parsed = std::sscanf(line.c_str(), "%llx-%llx %7s %llx %x:%x %llu %4095s",
-      (unsigned long long*)&start, (unsigned long long*)&end, perms,
-      (unsigned long long*)&offset, &devMajor, &devMinor, (unsigned long long*)&inode, path);
-    if (parsed < 7 || addr < start || addr >= end) continue;
-    info->st_size = sizeof(ModuleInfoForUnwind);
-    std::strncpy(info->name, parsed >= 8 ? path : "", sizeof(info->name) - 1);
-    info->name[sizeof(info->name) - 1] = '\0';
-    info->eh_frame_hdr_addr = 0;
-    info->eh_frame_addr = 0;
-    info->eh_frame_size = 0;
-    info->seg0_addr = start;
-    info->seg0_size = end - start;
-    return 0;
-  }
-  return SCE_KERNEL_ERROR_ESRCH;
+  const auto mapping = HostMapping::Find(addr, "sceKernelGetModuleInfoForUnwind");
+  if (!mapping) return SCE_KERNEL_ERROR_ESRCH;
+  info->st_size = sizeof(ModuleInfoForUnwind);
+  std::strncpy(info->name, mapping->path.c_str(), sizeof(info->name) - 1);
+  info->name[sizeof(info->name) - 1] = '\0';
+  info->eh_frame_hdr_addr = 0;
+  info->eh_frame_addr = 0;
+  info->eh_frame_size = 0;
+  info->seg0_addr = mapping->start;
+  info->seg0_size = mapping->end - mapping->start;
+  if (IsRelinkedImage(addr)) FillGuestUnwindInfo(addr, info);
+  return 0;
 #endif
 }
 
 namespace {
 
-struct PendingModuleArgs {
-    std::size_t args = 0;
-    const void* argp = nullptr;
-};
 thread_local PendingModuleArgs pendingModuleArgs;
 thread_local int pendingModuleInitResult = 0;
 
