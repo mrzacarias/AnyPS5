@@ -5,6 +5,7 @@
 #include <spirv/unified1/spirv.hpp>
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <initializer_list>
 #include <optional>
 #include <string>
@@ -20,6 +21,8 @@ struct Pair {
 };
 
 std::uint32_t Exact(SpirvEmitterState& state, std::uint32_t result) {
+    static const bool contract = std::getenv("APS5_ALLOW_F32_CONTRACTION") != nullptr;
+    if (contract) return result;
     state.module.AddAnnotation(spv::OpDecorate, result, spv::DecorationNoContraction);
     return result;
 }
