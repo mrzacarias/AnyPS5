@@ -611,8 +611,18 @@ bool describePages(std::uintptr_t address, std::size_t bytes, Emit&& emit) {
         }
         const auto next = std::min<std::uintptr_t>(end, regionBase + regionSize);
         const bool readable = (info.protection & VM_PROT_READ) != 0;
-        if (!emit(PageRun{cursor, next, readable, readable && (info.protection & VM_PROT_WRITE) != 0})) return true;
-        cursor = next;
+        if (!readable || (info.protection & VM_PROT_WRITE) != 0) {
+            if (!emit(PageRun{cursor, next, readable, readable})) return true;
+            cursor = next;
+            continue;
+        }
+        // Pages the write watch protected are writable to the guest.
+        while (cursor < next) {
+            bool watchProtected = false;
+            const auto run = GuestWriteWatch::GuestWriteWatchProtectedRun_nid_postfix(cursor, next - cursor, &watchProtected);
+            if (!emit(PageRun{cursor, cursor + run, true, watchProtected})) return true;
+            cursor += run;
+        }
 #else
         if (const int fd = ProcMapsQueryFd(); fd >= 0) {
             procmap_query query{};
@@ -1209,7 +1219,16 @@ bool ImportWatched(std::uint64_t address, std::size_t bytes, const std::function
     const auto stop = (address + bytes + page - 1) & ~(page - 1);
     const bool covered = tracker.covers(first, static_cast<std::size_t>(stop - first));
     const bool before = covered && walkWrites(tracker, first, stop, StampKind::Cpu);
-    if (!import()) return false;
+    bool imported = false;
+    {
+#ifdef __APPLE__
+        // Metal maps a host pointer for the GPU with the protection its pages have at the import, so
+        // a page the write watch protected would drop every GPU store: the pages are open meanwhile.
+        const GuestArena::HostWrite open(reinterpret_cast<void*>(first), static_cast<std::size_t>(stop - first));
+#endif
+        imported = import();
+    }
+    if (!imported) return false;
     if (!before || !walkWrites(tracker, first, stop, StampKind::ImportWindow)) unwatchLocked(tracker, first, static_cast<std::size_t>(stop - first));
     return true;
 }
