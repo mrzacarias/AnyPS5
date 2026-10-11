@@ -173,7 +173,7 @@ static void ClosePadDevice(AudioOut2Context& context) {
 
 static void UpdatePadDevice(AudioOut2Context& context, Clock::time_point now) {
     if (context.padDevice != 0 && SDL_GetAudioDeviceStatus(context.padDevice) == SDL_AUDIO_STOPPED) {
-        APS5_LOG_CHARS_OUT("AudioOut2: the controller sound card went away; its ports play in the main mix");
+        APS5_LOG_CHARS_OUT("AudioOut2: the controller sound card went away; its speaker port plays in the main mix");
         ClosePadDevice(context);
         context.nextPadProbe = now + PAD_PROBE_INTERVAL;
     }
