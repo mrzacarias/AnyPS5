@@ -233,6 +233,7 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         if (state.conservativeRasterization != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT) raster.pNext = &conservative;
         VkPipelineMultisampleStateCreateInfo samples{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
         samples.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        samples.alphaToCoverageEnable = state.alphaToCoverage ? VK_TRUE : VK_FALSE;
         VkPipelineDepthStencilStateCreateInfo depthStencil{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
         depthStencil.depthTestEnable = state.depthTest;
         depthStencil.depthWriteEnable = state.depthWrite;
@@ -423,6 +424,7 @@ std::vector<std::byte> pipelineKey(const Context& context, const State& state, c
     append(key, state.frontFace);
     append(key, state.negativeOneToOne);
     append(key, state.depthClamp && context.depthClamp);
+    append(key, state.alphaToCoverage);
     append(key, state.conservativeRasterization);
     append(key, state.blends.size());
     for (const auto& blend : state.blends) append(key, blend);

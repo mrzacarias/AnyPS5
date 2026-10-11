@@ -103,7 +103,7 @@ constexpr std::uint32_t DepthControlMask = ~0x007007f0u;
 // to run, which it always does here.
 constexpr std::uint32_t ShaderControlMask = ~(0x0000f870u | 0x00020600u | 0x00010000u);
 constexpr std::uint32_t PixelStageRunsMask = 0x00020747u;
-constexpr std::uint32_t AlphaToCoverageMask = ~0x0001ff00u;
+constexpr std::uint32_t AlphaToCoverageMask = ~0x0001ff01u;
 constexpr std::uint32_t ScanModeMask = ~0x22u;
 constexpr std::uint32_t ScanControlMask = ~0x06023fffu;
 constexpr std::uint32_t ScreenOffsetMask = ~0x01ff01ffu;
@@ -557,6 +557,7 @@ State DecodeState(const QueueState& queue) {
     if (viewportControl != 0x43fu) throw std::runtime_error(vteMessage(viewportControl));
     zero(cx, 0x204, ClipControlMask, "unsupported PA_CL_CLIP_CNTL flags");
     result.depthClamp = (read(cx, 0x204) & 0x0c000000u) != 0;
+    result.alphaToCoverage = (read(cx, 0x2dc) & 1u) != 0;
     result.negativeOneToOne = (read(cx, 0x204) & 0x80000u) == 0;
     const auto raster = read(cx, 0x205);
     // Bits 5-10 give the front/back polygon type (2 = filled triangles), which POLY_MODE (bit 3) turns on

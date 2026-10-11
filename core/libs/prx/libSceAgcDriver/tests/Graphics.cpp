@@ -1170,6 +1170,8 @@ void InitialContextTests() {
     }
     queue.context[0x206] = 0x43f;
     queue.context[0x2dc] |= 1;
+    Require(AgcDriver::Graphics::DecodeState(queue).alphaToCoverage, "ALPHA_TO_MASK_ENABLE did not enable alpha-to-coverage");
+    queue.context[0x2dc] |= 0x20000;
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "alpha-to-coverage");
     queue.context.erase(0x2dc);
     expectFailure([&] { AgcDriver::Graphics::DecodeState(queue); }, "missing register");
