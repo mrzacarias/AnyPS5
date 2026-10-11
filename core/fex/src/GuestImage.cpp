@@ -167,12 +167,18 @@ GuestImage::GuestImage(const std::filesystem::path& path) : path(path) {
 
 std::optional<std::uint64_t> GuestImage::StartFunction() const {
     constexpr unsigned char MoveRspToRdiAlignRspClearRsiCall[] = {0x48, 0x89, 0xe7, 0x48, 0x83, 0xe4, 0xf0, 0x48, 0x31, 0xf6, 0xe8};
-    constexpr std::size_t CallTarget = sizeof(MoveRspToRdiAlignRspClearRsiCall);
+    constexpr unsigned char MoveRspToRdiAlignRspZeroFrameClearRsiCall[] = {0x48, 0x89, 0xe7, 0x48, 0x83, 0xe4, 0xf0, 0x6a, 0x00, 0x6a, 0x00, 0x48, 0x89, 0xe5, 0x48, 0x31, 0xf6, 0xe8};
     const auto* code = reinterpret_cast<const unsigned char*>(entry);
-    if (entry < start || entry + CallTarget + 6 > start + size || std::memcmp(code, MoveRspToRdiAlignRspClearRsiCall, CallTarget) != 0) return std::nullopt;
+    const auto matches = [&](const unsigned char* stub, std::size_t length) {
+        return entry >= start && entry + length + 6 <= start + size && std::memcmp(code, stub, length) == 0;
+    };
+    std::size_t callTarget = 0;
+    if (matches(MoveRspToRdiAlignRspClearRsiCall, sizeof(MoveRspToRdiAlignRspClearRsiCall))) callTarget = sizeof(MoveRspToRdiAlignRspClearRsiCall);
+    else if (matches(MoveRspToRdiAlignRspZeroFrameClearRsiCall, sizeof(MoveRspToRdiAlignRspZeroFrameClearRsiCall))) callTarget = sizeof(MoveRspToRdiAlignRspZeroFrameClearRsiCall);
+    else return std::nullopt;
     std::int32_t displacement;
-    std::memcpy(&displacement, code + CallTarget, sizeof(displacement));
-    return entry + CallTarget + sizeof(displacement) + displacement;
+    std::memcpy(&displacement, code + callTarget, sizeof(displacement));
+    return entry + callTarget + sizeof(displacement) + displacement;
 }
 
 std::optional<GuestSymbol> GuestImage::Export(const std::string& name) const {
