@@ -1,3 +1,4 @@
+#include "IntermediateRepresentation/IrBuilder.hpp"
 #include "Optimization/HostInterpolationChecker.hpp"
 #include "IntermediateRepresentation/IrBlock.hpp"
 #include "IntermediateRepresentation/IrMetadata/StageIO.hpp"
@@ -127,6 +128,38 @@ bool HostInterpolationChecker::Lower(IrProgram& program, const ShaderPixelInputI
             inst->Invalidate();
             inst->SetParent(nullptr);
             it = instructions.erase(it);
+        }
+    }
+    DeadCodeEliminator{}.Eliminate(program);
+    if (MaskedSelectEliminator{}.Eliminate(program).removedSelects != 0u) DeadCodeEliminator{}.Eliminate(program);
+    for (const auto& block : program.Blocks()) {
+        for (const IrValue* inst : block->Instructions()) {
+            if (isBarycentric(*inst) || inst->Opcode() == IrOpcode::InterpolateHostP1) return false;
+        }
+    }
+    return true;
+}
+
+bool HostInterpolationChecker::LowerApproximately(IrProgram& program) const {
+    for (const auto& block : program.Blocks()) {
+        auto& instructions = block->Instructions();
+        for (auto it = instructions.begin(); it != instructions.end();) {
+            IrValue* inst = *it;
+            if (inst->Opcode() == IrOpcode::SelectU32 && inst->Argument(1)->Resolve()->Opcode() == IrOpcode::InterpolateHostP1 && partialSelect(*inst)) inst->ReplaceAllUsesWith(inst->Argument(2));
+            if (inst->Opcode() != IrOpcode::InterpolateHostP2) {
+                ++it;
+                continue;
+            }
+            inst->Invalidate();
+            inst->SetParent(nullptr);
+            it = instructions.erase(it);
+        }
+    }
+    IrBuilder builder(program);
+    for (const auto& block : program.Blocks()) {
+        for (IrValue* inst : block->Instructions()) {
+            if (inst->Opcode() == IrOpcode::InterpolateHostP1) inst->ReplaceAllUsesWith(&builder.ConstantF32(0.0f));
+            else if (isBarycentric(*inst)) inst->ReplaceAllUsesWith(&builder.Constant(0u));
         }
     }
     DeadCodeEliminator{}.Eliminate(program);

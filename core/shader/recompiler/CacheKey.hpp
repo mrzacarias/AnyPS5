@@ -240,6 +240,7 @@ private:
         append(key, value.srgbDecodeFormats);
         append(key, value.narrowSubgroupClock);
         append(key, value.subgroupSupportedStages);
+        append(key, value.geometryShader);
         append(key, value.float64DenormPreserve);
     }
 };
