@@ -629,6 +629,20 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window) : state(std::make_u
     // MoltenVK is a portability driver: the loader lists it only for instances that opt in.
     instanceExtensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     create.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    const std::int32_t argumentBuffers = 0;
+    const VkLayerSettingEXT setting{"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &argumentBuffers};
+    const VkLayerSettingsCreateInfoEXT settings{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 1, &setting};
+    {
+        std::uint32_t availableCount = 0;
+        const auto enumerateExtensions = state->InstanceFunction<PFN_vkEnumerateInstanceExtensionProperties>("vkEnumerateInstanceExtensionProperties");
+        check(enumerateExtensions(nullptr, &availableCount, nullptr), "vkEnumerateInstanceExtensionProperties");
+        std::vector<VkExtensionProperties> available(availableCount);
+        check(enumerateExtensions(nullptr, &availableCount, available.data()), "vkEnumerateInstanceExtensionProperties");
+        if (std::any_of(available.begin(), available.end(), [](const auto& item) { return std::strcmp(item.extensionName, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME) == 0; })) {
+            instanceExtensions.push_back(VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
+            create.pNext = &settings;
+        }
+    }
 #endif
     create.enabledExtensionCount = static_cast<std::uint32_t>(instanceExtensions.size());
     create.ppEnabledExtensionNames = instanceExtensions.empty() ? nullptr : instanceExtensions.data();
@@ -879,12 +893,7 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window) : state(std::make_u
     state->memoryBudget = hasExtension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
     // Guest memory is host memory: importing it lets address-based shaders use it in place instead of
     // copying every registered allocation per draw.
-#ifdef __APPLE__
-    const bool importHostMemory = std::getenv("APS5_HOST_IMPORT") != nullptr;
-#else
-    const bool importHostMemory = std::getenv("APS5_NO_HOST_IMPORT") == nullptr;
-#endif
-    if (hasExtension(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) && importHostMemory) {
+    if (hasExtension(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) && std::getenv("APS5_NO_HOST_IMPORT") == nullptr) {
         VkPhysicalDeviceDriverProperties driverProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
         VkPhysicalDeviceExternalMemoryHostPropertiesEXT hostProperties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT, &driverProperties};
         VkPhysicalDeviceProperties2 properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &hostProperties};
