@@ -19,7 +19,9 @@
 #include <cstdlib>
 #include <system_error>
 #include <pthread.h>
+#ifndef __APPLE__
 #include <ucontext.h>
+#endif
 #include <unistd.h>
 #endif
 
@@ -302,7 +304,7 @@ bool RaiseOn(Pthread thread, GuestExceptionHandler handler, int signum) {
     ResumeThread(native);
     return true;
 }
-#else
+#elif !defined(__APPLE__)
 constexpr int HostSignal = SIGUSR1;
 constexpr std::size_t FxsaveRegisterBytes = 416;
 

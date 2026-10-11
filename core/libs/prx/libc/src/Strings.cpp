@@ -182,13 +182,6 @@ unsigned long long APS5_VABI strtoull_nid_postfix(const char* str, char** endptr
     return ConvertInteger(str, endptr, base, std::strtoull);
 }
 
-std::intmax_t APS5_VABI strtoimax_nid_postfix(const char* str, char** endptr, int base) {
-    return ConvertInteger(str, endptr, base, std::strtoimax);
-}
-
-std::uintmax_t APS5_VABI strtoumax_nid_postfix(const char* str, char** endptr, int base) {
-    return ConvertInteger(str, endptr, base, std::strtoumax);
-}
 
 double APS5_VABI strtod_nid_postfix(const char* str, char** endptr) {
     return std::strtod(str, endptr);

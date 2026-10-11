@@ -1,4 +1,7 @@
 add_library(libSceLibcInternal SHARED EXCLUDE_FROM_ALL Export.cpp FileTime.cpp UserContext.cpp)
+if(APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+    set_source_files_properties(UserContext.cpp PROPERTIES HEADER_FILE_ONLY ON)
+endif()
 target_include_directories(libSceLibcInternal PRIVATE ${LIBS_INCLUDE_DIR})
 target_link_libraries(libSceLibcInternal PRIVATE ${CMAKE_DL_LIBS})
 configure_windows_unwind(libSceLibcInternal)

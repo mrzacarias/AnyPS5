@@ -13,6 +13,12 @@
 #include <atomic>
 #include <filesystem>
 #include <random>
+#elif defined(__APPLE__)
+#include <atomic>
+#include <cstdio>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #else
 #include <sys/mman.h>
 #endif
@@ -67,6 +73,15 @@ int CreateAnonymousFile() {
     }
     errno = EEXIST;
     return -1;
+#elif defined(__APPLE__)
+    static std::atomic<unsigned> sequence{0};
+    char name[32];
+    std::snprintf(name, sizeof(name), "/aps5-shm-%d-%u", static_cast<int>(::getpid()), sequence.fetch_add(1));
+    const int descriptor = ::shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+    if (descriptor < 0) return -1;
+    ::shm_unlink(name);
+    ::fcntl(descriptor, F_SETFD, FD_CLOEXEC);
+    return descriptor;
 #else
     return memfd_create("anyps5 shm_open", MFD_CLOEXEC);
 #endif

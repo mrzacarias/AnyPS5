@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "prx/libc/include/X87Extended.hpp"
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/WindowsFormatting.hpp"
@@ -269,7 +270,9 @@ private:
     }
 
     Outcome Float(const Directive& directive) {
+#if defined(__x86_64__)
         static_assert(sizeof(long double) == 16 && std::numeric_limits<long double>::digits == 64);
+#endif
         if (!directive.length.empty() && directive.length != "l" && directive.length != "L")
             throw std::invalid_argument("swscanf_s: invalid floating length modifier " + directive.length);
         void* target = nullptr;
@@ -281,7 +284,11 @@ private:
         input += field.size();
         if (target != nullptr) {
             if (directive.length == "L") {
+#if defined(__x86_64__)
                 const long double value = std::strtold(field.c_str(), nullptr);
+#else
+                const auto value = LibcDetail::ParseX87(field.c_str(), nullptr);
+#endif
                 std::memcpy(target, &value, sizeof(value));
             } else if (directive.length == "l") {
                 const double value = std::strtod(field.c_str(), nullptr);

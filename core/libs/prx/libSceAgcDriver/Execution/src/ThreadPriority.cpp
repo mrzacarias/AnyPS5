@@ -42,7 +42,7 @@ void LogOnce(const char* role, const std::string& text) {
     std::fprintf(stderr, "[thread-priority] %s: %s\n", role, text.c_str());
 }
 
-#ifndef _WIN32
+#if defined(__linux__)
 
 struct DBusConnection;
 struct DBusMessage;
@@ -268,7 +268,7 @@ void Raise(const char* role) {
     LogOnce(role, "nice " + std::to_string(nice) + " via rtkit");
 }
 
-#else
+#elif defined(_WIN32)
 
 void Raise(const char* role) {
     const int priority = RequestedMode() == ThreadPriorityMode::Realtime ? THREAD_PRIORITY_TIME_CRITICAL : THREAD_PRIORITY_HIGHEST;
@@ -276,6 +276,12 @@ void Raise(const char* role) {
         throw std::runtime_error(std::string("APS5_THREAD_PRIORITY: ") + role + " SetThreadPriority failed (error " + std::to_string(GetLastError()) + ")");
     }
     LogOnce(role, priority == THREAD_PRIORITY_TIME_CRITICAL ? "time-critical" : "highest");
+}
+
+#else
+
+void Raise(const char* role) {
+    throw std::runtime_error(std::string("APS5_THREAD_PRIORITY: ") + role + ": raised worker priorities are not supported on macOS");
 }
 
 #endif

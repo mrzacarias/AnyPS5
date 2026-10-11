@@ -18,7 +18,7 @@
 
 #include "prx/libc/include/WindowsFormatting.hpp"
 
-#ifdef _WIN32
+#if defined(_WIN32) || !APS5_GUEST_VA_LIST_IS_HOST
 #include "prx/libc/include/WindowsScanning.hpp"
 #endif
 

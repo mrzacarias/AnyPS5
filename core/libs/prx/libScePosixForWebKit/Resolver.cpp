@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#include <mutex>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -118,11 +119,21 @@ GuestResolver::HostEntry* APS5_VABI gethostbyname_nid_postfix(const char* name) 
         std::vector<char> buffer;
         int hostError = 0;
         int error = 0;
+#ifdef __APPLE__
+        static std::mutex lookupLock;
+        std::unique_lock lookupGuard(lookupLock, std::defer_lock);
+        if (!numeric) {
+            lookupGuard.lock();
+            native = ::gethostbyname(name);
+            if (!native) hostError = h_errno;
+        }
+#else
         if (!numeric) {
             buffer.resize(1024);
             while ((error = ::gethostbyname_r(name, &nativeEntry, buffer.data(), buffer.size(), &native, &hostError)) == ERANGE)
                 buffer.resize(buffer.size() * 2);
         }
+#endif
         if (error != 0 || !native) {
             *sceNetErrnoLoc() = hostError != 0 ? hostError : 3;
             if (hostError == -1) errno = error == EAGAIN ? 35 : error;

@@ -307,7 +307,7 @@ const char* createDmaBufImport(const Context& context, HostImport& entry, int fi
 }
 #endif
 
-#ifndef _WIN32
+#ifdef __linux__
 constexpr std::uint64_t ImportChunkBytes = std::uint64_t{64} << 20u;
 
 struct ImportChunk {

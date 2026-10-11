@@ -35,11 +35,11 @@ extern "C" void Aps5RegisterGuestImage_nid_no_patch(const dl_phdr_info* image) {
         const bool writable = (header.p_flags & PF_W) != 0;
         const bool readable = writable || (header.p_flags & PF_R) != 0;
         if (!mutation.Overlaps(reinterpret_cast<void*>(begin), static_cast<std::size_t>(end - begin))) {
-            mutation.Add(reinterpret_cast<void*>(begin), static_cast<std::size_t>(end - begin), readable, writable);
+            mutation.Add(reinterpret_cast<void*>(begin), static_cast<std::size_t>(end - begin), readable, writable, false);
             continue;
         }
         for (auto page = begin; page < end; page += 0x1000)
-            if (!mutation.Overlaps(reinterpret_cast<void*>(page), 0x1000)) mutation.Add(reinterpret_cast<void*>(page), 0x1000, readable, writable);
+            if (!mutation.Overlaps(reinterpret_cast<void*>(page), 0x1000)) mutation.Add(reinterpret_cast<void*>(page), 0x1000, readable, writable, false);
     }
 }
 

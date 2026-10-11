@@ -23,7 +23,13 @@
 #include <sstream>
 #include <system_error>
 #include <vector>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include "prx/libc/include/specifics/linux/ElfTypes.hpp"
+#else
 #include <link.h>
+#endif
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -74,7 +80,7 @@ void recordChange(void* mutation, const void* pointer, std::size_t bytes) {
     if (mutation != nullptr && bytes != 0) static_cast<MutationState*>(mutation)->changed.emplace_back(reinterpret_cast<std::uintptr_t>(pointer), bytes);
 }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
 std::vector<std::pair<std::uintptr_t, std::size_t>> fileBackedWritableImage() {
     const auto image = std::filesystem::read_symlink("/proc/self/exe").string();
     std::ifstream maps("/proc/self/maps");
@@ -240,6 +246,44 @@ void GuestAllocationsRegisterMainImage_nid_postfix(void*) {
     std::map<std::uint64_t, Page> pages;
     const auto pageSize = static_cast<std::uint64_t>(::sysconf(_SC_PAGESIZE));
     std::pair<std::map<std::uint64_t, Page>*, std::uint64_t> collection{&pages, pageSize};
+#ifdef __APPLE__
+    // System libraries live in the dyld shared cache, gigabytes that no guest image is part of, and
+    // __PAGEZERO reserves the low 4 GB with no access at all; neither is registered.
+    for (std::uint32_t image = 0; image < _dyld_image_count(); ++image) {
+        const auto* header = reinterpret_cast<const mach_header_64*>(_dyld_get_image_header(image));
+        if (!header || header->magic != MH_MAGIC_64 || (header->flags & MH_DYLIB_IN_CACHE) != 0) continue;
+        const auto slide = static_cast<std::uint64_t>(_dyld_get_image_vmaddr_slide(image));
+        bool relinked = false;
+        {
+            const auto* scan = reinterpret_cast<const load_command*>(header + 1);
+            for (std::uint32_t index = 0; index < header->ncmds; ++index) {
+                relinked = relinked || (scan->cmd == LC_SEGMENT_64 && std::strncmp(reinterpret_cast<const segment_command_64*>(scan)->segname, "__APS5DATA", 16) == 0);
+                scan = reinterpret_cast<const load_command*>(reinterpret_cast<const std::uint8_t*>(scan) + scan->cmdsize);
+            }
+        }
+        const auto* command = reinterpret_cast<const load_command*>(header + 1);
+        for (std::uint32_t index = 0; index < header->ncmds; ++index) {
+            if (command->cmd == LC_SEGMENT_64) {
+                const auto& segment = *reinterpret_cast<const segment_command_64*>(command);
+                // A relinked guest keeps its own memory in the __ELF segments; the header, the metadata and
+                // the link information around them are not guest memory, and a range the guest rounds to its
+                // 16 KiB pages must not spill into them.
+                const bool guestMemory = !relinked || std::strncmp(segment.segname, "__ELF", 5) == 0;
+                if (guestMemory && segment.vmsize != 0 && segment.initprot != VM_PROT_NONE) {
+                    const auto start = (slide + segment.vmaddr) & ~(pageSize - 1);
+                    const auto end = (slide + segment.vmaddr + segment.vmsize + pageSize - 1) & ~(pageSize - 1);
+                    for (auto page = start; page < end; page += pageSize) {
+                        auto& entry = pages[page];
+                        entry.readable = entry.readable || (segment.initprot & (VM_PROT_READ | VM_PROT_WRITE)) != 0;
+                        entry.writable = entry.writable || (segment.initprot & VM_PROT_WRITE) != 0;
+                    }
+                }
+            }
+            command = reinterpret_cast<const load_command*>(reinterpret_cast<const std::uint8_t*>(command) + command->cmdsize);
+        }
+    }
+    (void)collection;
+#else
     dl_iterate_phdr([](dl_phdr_info* image, std::size_t, void* data) {
         auto& collected = *static_cast<std::pair<std::map<std::uint64_t, Page>*, std::uint64_t>*>(data);
         for (int index = 0; index < image->dlpi_phnum; ++index) {
@@ -255,6 +299,7 @@ void GuestAllocationsRegisterMainImage_nid_postfix(void*) {
         }
         return 1;
     }, &collection);
+#endif
     require(!pages.empty(), "main guest image has no loadable segments");
     auto replacement = state.ranges;
     for (auto page = pages.begin(); page != pages.end();) {
@@ -432,10 +477,10 @@ std::map<std::uint64_t, std::shared_ptr<const Range>> replaceRange(const void* p
         const auto insert = [&](std::uint64_t first, std::uint64_t last, bool canRead, bool canWrite, bool gpuMapped) {
             if (first < last) replacement.emplace(first, std::make_shared<const Range>(Range{first, static_cast<std::size_t>(last - first), canRead, canWrite, range.allocationAddress, range.allocationBytes, range.releasable, gpuMapped}));
         };
-        insert(base, std::max(base, address), range.readable, range.writable, range.gpu);
-        if (!remove) insert(std::max(base, address), std::min(finish, end), readable, writable, gpu);
-        insert(std::min(finish, end), finish, range.readable, range.writable, range.gpu);
-        cursor = std::min(finish, end);
+        insert(base, std::max<std::uint64_t>(base, address), range.readable, range.writable, range.gpu);
+        if (!remove) insert(std::max<std::uint64_t>(base, address), std::min<std::uint64_t>(finish, end), readable, writable, gpu);
+        insert(std::min<std::uint64_t>(finish, end), finish, range.readable, range.writable, range.gpu);
+        cursor = std::min<std::uint64_t>(finish, end);
     }
     require(cursor == end, "guest protection or unmap range is not registered");
     return replacement;

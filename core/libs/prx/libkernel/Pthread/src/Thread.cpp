@@ -1,3 +1,6 @@
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
 #include "../include/Pthread.hpp"
 #include "../include/ThreadLifecycle.hpp"
 #include "../include/WindowsThreadLocal.hpp"
@@ -89,10 +92,7 @@ extern "C" void Aps5SetGuestStackLimits_nid_no_patch(bool (*query)(std::uintptr_
 }
 #endif
 
-static bool HostStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
-#if defined(__APPLE__) && defined(__aarch64__)
-    if (guestStackLimits != nullptr && guestStackLimits(low, high)) return *high > *low;
-#endif
+static bool NativeStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
 #ifdef _WIN32
     ULONG_PTR lowLimit = 0;
     ULONG_PTR highLimit = 0;
@@ -120,6 +120,13 @@ static bool HostStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
     *high = *low + size;
 #endif
     return *high > *low;
+}
+
+static bool HostStackLimits(std::uintptr_t* low, std::uintptr_t* high) {
+#if defined(__APPLE__) && defined(__aarch64__)
+    if (guestStackLimits != nullptr && guestStackLimits(low, high)) return *high > *low;
+#endif
+    return NativeStackLimits(low, high);
 }
 
 static void SetStackFromHost(PthreadPrivate* thread) {
@@ -234,6 +241,11 @@ PthreadPrivate::~PthreadPrivate() {
 static void BindHostCpuClock(PthreadPrivate* self) {
 #ifdef _WIN32
     (void)self;
+#elif defined(__APPLE__)
+    auto& registry = CpuClocks();
+    std::lock_guard lock(registry.lock);
+    self->hostMachThread = pthread_mach_thread_np(pthread_self());
+    self->hostCpuClockBound = true;
 #else
     clockid_t clock{};
     const int error = pthread_getcpuclockid(pthread_self(), &clock);
@@ -290,10 +302,19 @@ bool GuestThreadCpuNanos(int cpuClockThread, std::uint64_t* nanos) {
         *nanos = 0;
         return true;
     }
+#ifdef __APPLE__
+    thread_basic_info_data_t info{};
+    mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
+    if (thread_info(thread->hostMachThread, THREAD_BASIC_INFO, reinterpret_cast<thread_info_t>(&info), &count) != KERN_SUCCESS)
+        throw std::runtime_error("Querying guest thread CPU time");
+    const auto toNanos = [](const time_value_t& value) { return static_cast<std::uint64_t>(value.seconds) * 1000000000ULL + static_cast<std::uint64_t>(value.microseconds) * 1000ULL; };
+    *nanos = toNanos(info.user_time) + toNanos(info.system_time);
+#else
     struct timespec time{};
     if (clock_gettime(thread->hostCpuClock, &time) != 0)
         throw std::system_error(errno, std::generic_category(), "Querying guest thread CPU time");
     *nanos = static_cast<std::uint64_t>(time.tv_sec) * 1000000000ULL + static_cast<std::uint64_t>(time.tv_nsec);
+#endif
 #endif
     return true;
 }
@@ -308,7 +329,7 @@ static thread_local std::jmp_buf* threadExitJump = nullptr;
 static void* MeasureStackReserve(void* reserve) {
     std::uintptr_t low = 0;
     std::uintptr_t high = 0;
-    if (HostStackLimits(&low, &high))
+    if (NativeStackLimits(&low, &high))
         *static_cast<std::size_t*>(reserve) = high - reinterpret_cast<std::uintptr_t>(&low);
     return nullptr;
 }
@@ -395,6 +416,9 @@ static void RunThread(std::unique_ptr<ThreadArgs> args) {
     PthreadPrivate* self = args->self;
     BindHostCpuClock(self);
     TimedWait::BindThreadWaitState(&self->waitCount);
+#if defined(__APPLE__) && defined(__aarch64__)
+    if (guestStackLimits != nullptr) SetStackFromHost(self);
+#endif
     CurrentGuestState().current = self;
     RegisterStack(self);
 #ifndef _WIN32
@@ -506,7 +530,7 @@ static void* StartNativeThread(void* opaque) {
         std::uintptr_t low = 0;
         std::uintptr_t high = 0;
         const auto reserve = HostStackReserve();
-        if (!HostStackLimits(&low, &high) || high - low < reserve + self->stackSize)
+        if (!NativeStackLimits(&low, &high) || high - low < reserve + self->stackSize)
             throw std::runtime_error("Cannot query guest thread stack");
         self->stackAddress = reinterpret_cast<void*>(high - reserve - self->stackSize);
         self->threadId = std::this_thread::get_id();
