@@ -36,6 +36,7 @@ namespace AgcDriver::Graphics {
 namespace {
 
 Recorder* activeRecorder = nullptr;
+thread_local bool hookOrdersGpuWrites = false;
 
 bool DrawProfiled() {
     static const bool profiled = std::getenv("APS5_PROFILE_DRAW") != nullptr;
@@ -1021,7 +1022,7 @@ void FlushForAccess(std::uint64_t address, std::size_t bytes) {
         hookLocks.fetch_add(1, std::memory_order_relaxed);
         GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Hook);
         std::lock_guard gpu(GuestMemory::GpuMutex());
-        if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->PendingWriteOverlaps(address, bytes)) {
+        if (auto* recorder = Recorder::Active(); recorder != nullptr && recorder->PendingWriteOverlaps(address, bytes) && !hookOrdersGpuWrites) {
             const HookSyncScope attribution(*recorder, address, bytes);
             Recorder::CountSync(1);
             // The wait runs without the mutex when this acquisition is the outermost one (a stage-A
@@ -2719,6 +2720,10 @@ bool Recorder::PendingWriteOverlaps(std::uint64_t address, std::size_t bytes) co
         if (overlaps(*batch, address, end)) return true;
     }
     return false;
+}
+
+void Recorder::HookOrdersGpuWrites(bool ordered) {
+    hookOrdersGpuWrites = ordered;
 }
 
 bool Recorder::OpenWriteOverlaps(std::uint64_t address, std::size_t bytes) const {
