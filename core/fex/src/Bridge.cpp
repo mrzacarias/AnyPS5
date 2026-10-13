@@ -263,6 +263,7 @@ constexpr VariadicExport VariadicExports[] = {
     {"wprintf_nid_postfix", GuestList, 1},
     {"_open_nid_postfix", Integers, 2},
     {"fcntl_nid_postfix", Integers, 2},
+    {"_fcntl_nid_postfix", Integers, 2},
     {"openat_nid_postfix", Integers, 3},
     {"swprintf_nid_postfix", Unsupported, 3},
 };

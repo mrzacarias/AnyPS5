@@ -1358,4 +1358,12 @@ int64_t APS5_VABI writev_nid_postfix(int d, const KernelIovec* iov, int iovcnt) 
     return result < 0 ? PosixFailure(static_cast<int>(result) & 0xffff) : result;
 }
 
+int64_t APS5_VABI _readv_nid_postfix(int d, const KernelIovec* iov, int iovcnt) {
+    return readv_nid_postfix(d, iov, iovcnt);
+}
+
+int64_t APS5_VABI _writev_nid_postfix(int d, const KernelIovec* iov, int iovcnt) {
+    return writev_nid_postfix(d, iov, iovcnt);
+}
+
 }
