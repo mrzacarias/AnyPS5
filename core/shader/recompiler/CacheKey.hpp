@@ -177,6 +177,7 @@ private:
         append(key, value.conservativeZExport);
         append(key, value.orderedPixelShader);
         append(key, value.alphaToCoverage);
+        append(key, value.stencilRefExportEnable);
         append(key, value.targetOutputMode);
     }
 
@@ -242,6 +243,8 @@ private:
         append(key, value.subgroupSupportedStages);
         append(key, value.geometryShader);
         append(key, value.float64DenormPreserve);
+        append(key, value.registrationModules);
+        append(key, value.registrationWordLimit);
     }
 };
 

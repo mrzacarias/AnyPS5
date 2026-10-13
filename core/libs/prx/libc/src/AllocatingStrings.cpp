@@ -1,21 +1,16 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
+#include "SceTypes.hpp"
 #include <cerrno>
 #include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <memory>
 #include <new>
-#include <string>
 
 #include "prx/libc/include/VarArgsAbi.hpp"
 
-#if !APS5_GUEST_VA_LIST_IS_HOST
-#include "prx/libc/include/WindowsFormatting.hpp"
-#endif
-
 extern "C" {
+
+int APS5_VABI vasprintf_nid_postfix(char** destination, const char* format, VaList* args);
 
 char* APS5_VABI strndup_nid_postfix(const char* source, std::size_t limit) {
     std::size_t length = 0;
@@ -37,36 +32,8 @@ char* APS5_VABI strdup_nid_postfix(const char* source) {
 }
 
 int APS5_VABI asprintf_nid_postfix(char** destination, const char* format, ...) {
-    if (!destination) { errno = 22; return -1; }
-    *destination = nullptr;
-    if (!format) { errno = 22; return -1; }
     APS5_VA_BEGIN(format);
-    int result = -1;
-    try {
-#if !APS5_GUEST_VA_LIST_IS_HOST
-        std::string text;
-        const int count = LibcDetail::FormatWindows(nullptr, 0, format, args, &text);
-        const char* source = text.c_str();
-#else
-        char* text = nullptr;
-        const int count = ::vasprintf(&text, format, args);
-        std::unique_ptr<char, decltype(&std::free)> owner(text, std::free);
-        const char* source = text;
-#endif
-        if (count >= 0) {
-            auto* output = static_cast<char*>(ApplicationHeapAllocate_nid_no_patch(static_cast<std::size_t>(count) + 1));
-            if (output) {
-                std::memcpy(output, source, static_cast<std::size_t>(count) + 1);
-                *destination = output;
-                result = count;
-            } else errno = 12;
-        }
-    } catch (const std::bad_alloc&) {
-        errno = 12;
-    } catch (...) {
-        APS5_VA_END();
-        throw;
-    }
+    const int result = vasprintf_nid_postfix(destination, format, reinterpret_cast<VaList*>(args));
     APS5_VA_END();
     return result;
 }

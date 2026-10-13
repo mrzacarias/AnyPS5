@@ -22,6 +22,8 @@ struct SpirvTargetOptions {
     bool narrowSubgroupClock = false;
     std::uint32_t subgroupSupportedStages = ~0u;
     bool float64DenormPreserve = false;
+    bool registrationModules = false;
+    bool fragmentDescriptorSet = false;
 };
 
 class SpirvEmitter {
