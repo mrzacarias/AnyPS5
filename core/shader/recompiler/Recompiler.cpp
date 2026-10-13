@@ -306,6 +306,11 @@ struct SourceEntry {
     // The result memo, most recently used first, at most ResultMemoEntries (under mutex).
     std::list<ResultMemoEntry> memo;
     std::unordered_map<std::uint64_t, std::list<ResultMemoEntry>::iterator> memoIndex;
+    // The keys that missed once, in four-way buckets (under mutex, allocated at the first miss): a
+    // result is memoized at its key's second miss, so results used once (a draw whose user data
+    // changes every frame) do not push out the ones that come back.
+    std::vector<std::uint64_t> memoSightings;
+    std::vector<std::uint8_t> memoSightingNext;
 };
 
 namespace {
@@ -977,6 +982,25 @@ bool ResultMemo() {
 
 constexpr std::size_t ResultMemoEntries = 256;
 
+// Whether `index` missed before in `source`; records it when it did not. Four times the memo's
+// entries, so recurring keys that share a bucket evict each other only when more than four keys of
+// that bucket miss between two misses of one of them.
+bool memoSeenBefore(SourceEntry& source, std::uint64_t index) {
+    constexpr std::size_t Ways = 4;
+    constexpr std::size_t Buckets = ResultMemoEntries;
+    if (source.memoSightings.empty()) {
+        source.memoSightings.assign(Buckets * Ways, 0);
+        source.memoSightingNext.assign(Buckets, 0);
+    }
+    const auto bucket = static_cast<std::size_t>((index ^ (index >> 32u)) * 0x9e3779b97f4a7c15ull >> 56u) % Buckets;
+    auto* ways = source.memoSightings.data() + bucket * Ways;
+    if (std::find(ways, ways + Ways, index) != ways + Ways) return true;
+    auto& next = source.memoSightingNext[bucket];
+    ways[next] = index;
+    next = static_cast<std::uint8_t>((next + 1u) % Ways);
+    return false;
+}
+
 struct ResultMemoCounters {
     std::atomic<std::uint64_t> hits{0}, misses{0}, evictions{0}, populateNanoseconds{0};
     std::atomic<std::int64_t> lastReport{0};
@@ -1096,7 +1120,7 @@ std::shared_ptr<const RecompileResult> materializePreparedMemoized(SourceEntry& 
                 source.memoIndex.erase(found);
             }
         }
-        if (source.memoIndex.find(index) == source.memoIndex.end()) {
+        if (source.memoIndex.find(index) == source.memoIndex.end() && memoSeenBefore(source, index)) {
             source.memo.push_front({variant->artifact.variantId, hash, shared});
             source.memoIndex.emplace(index, source.memo.begin());
             while (source.memo.size() > ResultMemoEntries) {
