@@ -2544,6 +2544,17 @@ FrameDumps& Dumps() {
 
 }
 
+void VulkanDevice::AwaitDisplayKeys(const DisplayBuffer& buffer) {
+    if (buffer.tilingMode != 0 || buffer.dccAddress == 0) return;
+    const auto count = DisplayBufferKeyBytes(buffer);
+    GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Present);
+    std::lock_guard lock(GuestMemory::GpuMutex());
+    auto* recorder = Graphics::Recorder::Active();
+    if (recorder == nullptr || !recorder->PendingWriteOverlaps(buffer.dccAddress, count)) return;
+    Graphics::Recorder::CountSync(2);
+    recorder->SyncThrough(buffer.dccAddress, count, true);
+}
+
 bool VulkanDevice::PresentDisplayBuffer(const DisplayBuffer& buffer) {
     static const bool storeAtFlip = Graphics::StorageTexture::StoreAtFlipRequested(std::getenv("APS5_STORE_AT_FLIP"));
     if (storeAtFlip) Graphics::StorageTexture::FlushAllPending("flip");

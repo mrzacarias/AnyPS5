@@ -85,6 +85,10 @@ void Driver::Present(const PresentationWindow& window, const DisplayBuffer* buff
             presentable = presenting->AcquireImage();
             timing.Mark("acquire_image");
         }
+        if (presentable && buffer != nullptr && !syncFlip) {
+            presenting->AwaitDisplayKeys(*buffer);
+            timing.Mark("display_keys_wait");
+        }
         if (presentable) {
             GuestMemory::TagGpuLockSite(GuestMemory::GpuLockSite::Present);
             std::lock_guard lock(GuestMemory::GpuMutex());
