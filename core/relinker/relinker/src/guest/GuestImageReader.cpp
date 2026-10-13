@@ -299,6 +299,7 @@ GuestImage GuestImageReader::Read(const std::filesystem::path& path, std::vector
             if ((info >> 32) >= image.Symbols.size() || (plt && relocation != 7) || (relocation != 1 && relocation != 6 && relocation != 7 && relocation != 8 && relocation != 16 && relocation != 17 && relocation != 18)) fail("Unsupported relocation or symbol index");
             const auto target = Io::ReadU64(bytes, offset + index);
             const auto addend = Io::ReadU64(bytes, offset + index + 16);
+            const bool sectionSymbol = (info >> 32) != 0 && image.Symbols[info >> 32].Info == 3 && image.Symbols[info >> 32].Value == 0;
             mapped(target, 8, 2);
             const auto next = relocationTargets.lower_bound(target);
             if ((next != relocationTargets.end() && next->first < target + 8) || (next != relocationTargets.begin() && std::prev(next)->second > target)) fail("Overlapping guest relocations");
@@ -314,11 +315,11 @@ GuestImage GuestImageReader::Read(const std::filesystem::path& path, std::vector
                 if ((info >> 32) == 0 || (symbol.Info & 15) == 6 || (relocation != 1 && addend != 0) || (symbol.Section == 0 && symbol.Name.empty())) fail("Invalid guest symbol relocation");
             } else {
                 const auto& symbol = image.Symbols[info >> 32];
-                if (((info >> 32) == 0 && tls == nullptr) || ((info >> 32) != 0 && (symbol.Info & 15) != 6) || (relocation == 16 && addend != 0)) fail("Invalid guest TLS relocation");
+                if ((((info >> 32) == 0 || sectionSymbol) && tls == nullptr) || ((info >> 32) != 0 && !sectionSymbol && (symbol.Info & 15) != 6) || (relocation == 16 && addend != 0)) fail("Invalid guest TLS relocation");
             }
             const auto position = output.size();
             output.insert(output.end(), bytes.begin() + offset + index, bytes.begin() + offset + index + 24);
-            if (relocation == 8) Io::WriteU64(output, position + 8, 8);
+            if (relocation == 8 || (sectionSymbol && relocation >= 16)) Io::WriteU64(output, position + 8, relocation);
         }
     };
     if (tags.contains(7) || tags.contains(0x6100002f)) {
