@@ -929,8 +929,12 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
     instanceExtensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     create.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     const std::int32_t argumentBuffers = 0;
-    const VkLayerSettingEXT setting{"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &argumentBuffers};
-    const VkLayerSettingsCreateInfoEXT settings{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 1, &setting};
+    const VkBool32 retainedReferences = VK_TRUE;
+    const VkLayerSettingEXT setting[] = {
+        {"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &argumentBuffers},
+        {"MoltenVK", "MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &retainedReferences},
+    };
+    const VkLayerSettingsCreateInfoEXT settings{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 2, setting};
     {
         std::uint32_t availableCount = 0;
         const auto enumerateExtensions = state->InstanceFunction<PFN_vkEnumerateInstanceExtensionProperties>("vkEnumerateInstanceExtensionProperties");
