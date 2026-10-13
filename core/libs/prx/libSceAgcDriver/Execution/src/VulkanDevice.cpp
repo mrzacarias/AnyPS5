@@ -2451,7 +2451,7 @@ void WriteFrameBmp(int index, std::uint32_t fullWidth, std::uint32_t fullHeight,
     }
     char name[32];
     std::snprintf(name, sizeof(name), "frame_%03d.bmp", index);
-    {
+    try {
         std::ofstream file;
         file.exceptions(std::ios::failbit | std::ios::badbit);
         file.open(name, std::ios::binary);
@@ -2464,6 +2464,8 @@ void WriteFrameBmp(int index, std::uint32_t fullWidth, std::uint32_t fullHeight,
         file.write(reinterpret_cast<const char*>(header + 1), 48);
         file.write(reinterpret_cast<const char*>(pixels.data()), static_cast<std::streamsize>(pixels.size()));
         file.close();
+    } catch (const std::ios_base::failure&) {
+        std::fprintf(stderr, "[gpu] %s: write failed, errno=%d\n", name, errno);
     }
 }
 
