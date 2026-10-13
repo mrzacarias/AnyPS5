@@ -73,6 +73,10 @@ void DrawPipeline::Enqueue(Commit commit, std::vector<Range> writes, std::uint64
     }
     depthSum += items.size();
     ++enqueued;
+    for (const auto& [begin, limit] : writes) {
+        if (begin < writesBegin.load(std::memory_order_relaxed)) writesBegin.store(begin, std::memory_order_release);
+        if (limit > writesEnd.load(std::memory_order_relaxed)) writesEnd.store(limit, std::memory_order_release);
+    }
     items.push_back({std::move(commit), std::move(writes), labelAddress, std::move(labelBytes)});
     outstanding.fetch_add(1, std::memory_order_release);
     if (!started) {
@@ -147,6 +151,10 @@ void DrawPipeline::run() {
         const auto spent = elapsedNs(start);
         std::lock_guard lock(mutex);
         items.pop_front();
+        if (items.empty()) {
+            writesBegin.store(std::numeric_limits<std::uint64_t>::max(), std::memory_order_release);
+            writesEnd.store(0, std::memory_order_release);
+        }
         ++commits;
         commitNs += spent;
         if (failed) ++commitErrors;
@@ -188,6 +196,7 @@ std::optional<std::uint64_t> DrawPipeline::PendingLabel(std::uint64_t address, s
 
 bool DrawPipeline::Overlaps(std::uint64_t address, std::size_t bytes) {
     const auto end = address + bytes;
+    if (address >= writesEnd.load(std::memory_order_acquire) || end <= writesBegin.load(std::memory_order_acquire)) return false;
     std::lock_guard lock(mutex);
     for (const auto& item : items) {
         for (const auto& [begin, limit] : item.writes) {
