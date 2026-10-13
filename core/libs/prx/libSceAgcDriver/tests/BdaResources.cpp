@@ -1110,6 +1110,7 @@ void RunBdaResourceTests(const Context& context, const BdaTestAccess& access) {
         const ShaderRecompiler::BdaAbi::Fault report{ShaderRecompiler::BdaAbi::FaultState::Ready, ShaderRecompiler::BdaAbi::FaultReason::InvalidRectangle, 0, 0, 0, 0, 0};
         std::memcpy(fault.data(), &report, sizeof(report));
         reject([&] { resources.CheckFaults(); }, "rect-list requires");
+        resources.CheckFaults();
     }
     {
         ShaderResources resources(context, compiled, snapshots);
