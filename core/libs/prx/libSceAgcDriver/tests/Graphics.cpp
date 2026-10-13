@@ -5522,6 +5522,11 @@ int main(int argc, char** argv) {
             draw.indexAddress = 0;
             draw.flags = 1;
             expectFailure([&] { AgcDriver::Graphics::Draw(context, state, draw, {}); }, "draw modifiers");
+            AgcDriver::Pm4::DrawParameters indexed{0x1000, 0, 2, 1, 0, true};
+            AgcDriver::Graphics::Draw(context, state, indexed, {});
+            indexed.indexCount = 3;
+            indexed.instanceCount = 0;
+            AgcDriver::Graphics::Draw(context, state, indexed, {});
             auto bounded = state;
             bounded.depthBoundsTest = true;
             bounded.minDepthBounds = 0.25f;
