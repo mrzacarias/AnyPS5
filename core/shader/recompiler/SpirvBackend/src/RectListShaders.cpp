@@ -9,7 +9,9 @@
 #include <array>
 #include <bit>
 #include <limits>
+#include <map>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 
@@ -29,9 +31,38 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(std::string("Rect-list SPIR-V: ") + message);
 }
 
+constexpr std::array<spv::BuiltIn, 2> DistanceBuiltIns{spv::BuiltInClipDistance, spv::BuiltInCullDistance};
+
+// The length of the vertex stage's `builtin` output array, 0 without one.
+std::uint32_t outputArrayLength(std::span<const std::uint32_t> words, spv::BuiltIn builtin) {
+    std::map<std::uint32_t, std::uint32_t> constants;
+    std::map<std::uint32_t, std::uint32_t> arrayLengths;
+    std::map<std::uint32_t, std::uint32_t> pointees;
+    std::map<std::uint32_t, std::uint32_t> variables;
+    std::uint32_t decorated = 0;
+    for (std::size_t offset = 5; offset < words.size();) {
+        const auto count = words[offset] >> spv::WordCountShift;
+        require(count != 0 && count <= words.size() - offset, "malformed vertex SPIR-V instruction");
+        const auto* word = words.data() + offset;
+        const auto opcode = word[0] & spv::OpCodeMask;
+        if (opcode == spv::OpDecorate && count == 4 && word[2] == spv::DecorationBuiltIn && word[3] == builtin) decorated = word[1];
+        if (opcode == spv::OpConstant && count == 4) constants[word[2]] = word[3];
+        if (opcode == spv::OpTypeArray && count == 4) arrayLengths[word[1]] = word[3];
+        if (opcode == spv::OpTypePointer && count == 4 && word[2] == spv::StorageClassOutput) pointees[word[1]] = word[3];
+        if (opcode == spv::OpVariable && count >= 4 && word[3] == spv::StorageClassOutput) variables[word[2]] = word[1];
+        offset += count;
+    }
+    const auto variable = variables.find(decorated);
+    if (variable == variables.end()) return 0;
+    const auto pointee = pointees.find(variable->second);
+    const auto length = pointee != pointees.end() ? arrayLengths.find(pointee->second) : arrayLengths.end();
+    require(length != arrayLengths.end() && constants.contains(length->second), "vertex clip or cull distance output is not a sized array");
+    return constants.at(length->second);
+}
+
 class RectListEmitter {
 public:
-    RectListEmitter(const std::vector<Parameter>& parameters, spv::ExecutionModel model, std::uint32_t version, std::uint32_t faultBinding) : builder(version), faultBinding(faultBinding), version(version), parameters(parameters) {
+    RectListEmitter(const std::vector<Parameter>& parameters, std::array<std::uint32_t, 2> distances, spv::ExecutionModel model, std::uint32_t version, std::uint32_t faultBinding) : builder(version), faultBinding(faultBinding), version(version), parameters(parameters), distances(distances) {
         builder.AddMemoryModel(spv::AddressingModelLogical, spv::MemoryModelGLSL450);
 
         voidType = type(spv::OpTypeVoid);
@@ -116,6 +147,18 @@ public:
 
         const auto position = result(spv::OpSelect, vec4FloatType, isFourth, position3, load(vec4FloatType, access(ptrInputVec4Float, glIn, index, intConstant(0))));
         store(access(ptrOutputVec4Float, glOut, invocation, intConstant(0)), position);
+        const auto inputFloat = pointer(spv::StorageClassInput, floatType);
+        for (std::size_t kind = 0; kind < distances.size(); ++kind) {
+            for (std::uint32_t element = 0; element < distances[kind]; ++element) {
+                std::uint32_t interpolated = 0;
+                for (std::uint32_t i = 0; i < 3; ++i) {
+                    const auto corner = result(spv::OpFMul, floatType, load(floatType, access(inputFloat, distanceInputs[kind], intConstant(i), intConstant(element))), barycentric[i]);
+                    interpolated = i == 0 ? corner : result(spv::OpFAdd, floatType, interpolated, corner);
+                }
+                const auto distance = result(spv::OpSelect, floatType, fourth, interpolated, load(floatType, access(inputFloat, distanceInputs[kind], index, intConstant(element))));
+                store(access(ptrOutputFloat, distanceOutputs[kind], invocation, intConstant(element)), distance);
+            }
+        }
 
         for (std::uint32_t i = 0; i < parameters.size(); i++) {
             if (parameters[i].missing) {
@@ -149,6 +192,11 @@ public:
 
         const auto position = load(vec4FloatType, access(ptrInputVec4Float, glIn, index, intConstant(0)));
         store(access(ptrOutputVec4Float, glOut, intConstant(0)), position);
+        for (std::size_t kind = 0; kind < distances.size(); ++kind) {
+            for (std::uint32_t element = 0; element < distances[kind]; ++element) {
+                store(access(pointer(spv::StorageClassOutput, floatType), distanceOutputs[kind], intConstant(element)), load(floatType, access(ptrInputFloat, distanceInputs[kind], index, intConstant(element))));
+            }
+        }
         for (std::uint32_t i = 0; i < parameters.size(); i++) {
             store(outputs[i], load(vec4FloatType, access(ptrInputVec4Float, inputs[i], index)));
         }
@@ -271,6 +319,8 @@ private:
     void defineEntry(spv::ExecutionModel model) {
         builder.EmitCapability(spv::CapabilityShader);
         builder.EmitCapability(spv::CapabilityTessellation);
+        if (distances[0] != 0) builder.EmitCapability(spv::CapabilityClipDistance);
+        if (distances[1] != 0) builder.EmitCapability(spv::CapabilityCullDistance);
         main = result(spv::OpFunction, voidType, spv::FunctionControlMaskNone, functionType);
         if (model == spv::ExecutionModelTessellationControl) {
             builder.AddExecutionMode(main, spv::ExecutionModeOutputVertices, 4u);
@@ -296,6 +346,11 @@ private:
             decorate(tessCoord, spv::DecorationBuiltIn, spv::BuiltInTessCoord);
         }
         glIn = addInterface(spv::StorageClassInput, array(perVertexType, tessControl ? 3u : 4u));
+        for (std::size_t kind = 0; kind < distances.size(); ++kind) {
+            if (distances[kind] == 0) continue;
+            distanceInputs[kind] = addInterface(spv::StorageClassInput, array(array(floatType, distances[kind]), tessControl ? 3u : 4u));
+            decorate(distanceInputs[kind], spv::DecorationBuiltIn, DistanceBuiltIns[kind]);
+        }
 
         inputs.resize(parameters.size());
         std::array<std::uint32_t, 32> locations {};
@@ -325,6 +380,11 @@ private:
         } else {
             glOut = addInterface(spv::StorageClassOutput, perVertexType);
         }
+        for (std::size_t kind = 0; kind < distances.size(); ++kind) {
+            if (distances[kind] == 0) continue;
+            distanceOutputs[kind] = addInterface(spv::StorageClassOutput, tessControl ? array(array(floatType, distances[kind]), 4u) : array(floatType, distances[kind]));
+            decorate(distanceOutputs[kind], spv::DecorationBuiltIn, DistanceBuiltIns[kind]);
+        }
 
         outputs.resize(parameters.size());
         for (std::uint32_t i = 0; i < parameters.size(); i++) {
@@ -345,6 +405,10 @@ private:
     std::uint32_t version;
     std::uint32_t fault = 0;
     const std::vector<Parameter>& parameters;
+    // The vertex stage's clip and cull distance counts, and the stage's interfaces for them.
+    std::array<std::uint32_t, 2> distances;
+    std::array<std::uint32_t, 2> distanceInputs{};
+    std::array<std::uint32_t, 2> distanceOutputs{};
     std::vector<std::uint32_t> interfaces;
     std::vector<std::uint32_t> inputs;
     std::vector<std::uint32_t> outputs;
@@ -395,8 +459,13 @@ RectListShaders BuildRectListShaders(const RecompileResult& vertex, const Recomp
     const auto components = static_cast<std::uint32_t>((parameters.size() + 1) * 4);
     require(limits.maxPatchSize >= 4 && components <= limits.maxControlPerVertexInputComponents && components <= limits.maxControlPerVertexOutputComponents && components <= limits.maxEvaluationInputComponents && components <= limits.maxEvaluationOutputComponents && limits.maxControlPerPatchOutputComponents >= 6 && components * 4 + 6 <= limits.maxControlTotalOutputComponents, "tessellation interface exceeds device limits");
     const auto faultBinding = RuntimeAbi::BindingNumber(RuntimeAbi::Stage::TessellationControl, RuntimeAbi::Binding::FaultBuffer);
-    RectListEmitter control(parameters, spv::ExecutionModelTessellationControl, target.spirvVersion, faultBinding);
-    RectListEmitter evaluation(parameters, spv::ExecutionModelTessellationEvaluation, target.spirvVersion, faultBinding);
+    // The vertex stage's clip and cull distances (the recompiler's all-zero position distance among
+    // them) pass on as the position does. Taking them is also what keeps the positions readable on
+    // MoltenVK, which lays the control stage's inputs out from every vertex output: without them the
+    // control stage reads its positions from the wrong offsets and rejects every rectangle.
+    const std::array<std::uint32_t, 2> distances{outputArrayLength(vertex.spirv.Words(), DistanceBuiltIns[0]), outputArrayLength(vertex.spirv.Words(), DistanceBuiltIns[1])};
+    RectListEmitter control(parameters, distances, spv::ExecutionModelTessellationControl, target.spirvVersion, faultBinding);
+    RectListEmitter evaluation(parameters, distances, spv::ExecutionModelTessellationEvaluation, target.spirvVersion, faultBinding);
     RectListShaders shaders;
     shaders.control.spirv = control.EmitControl();
     shaders.control.bindings.push_back({DescriptorKind::StorageBuffer, DescriptorRole::FaultBuffer, 0, faultBinding, 1, {}});

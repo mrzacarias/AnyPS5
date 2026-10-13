@@ -115,7 +115,9 @@ struct Module {
             return;
         }
         // One gl_ClipDistance array holds the guest clip distances and the recompiler's all-zero position distance.
-        if (!input && ((value == spv::BuiltInClipDistance && (vertex || stage == Stage::TessellationEvaluation)) || (value == spv::BuiltInCullDistance && vertex))) {
+        // The rect-list control stage passes the vertex stage's distances on, so it outputs them too.
+        const bool tessellation = stage == Stage::TessellationControl || stage == Stage::TessellationEvaluation;
+        if (!input && (value == spv::BuiltInClipDistance || value == spv::BuiltInCullDistance) && (vertex || tessellation)) {
             const auto signature = Signature(type);
             auto& count = value == spv::BuiltInClipDistance ? clipDistances : cullDistances;
             Require(count == 0 && signature.size() == 6 && signature.starts_with("f32[") && signature[4] >= '1' && signature[4] <= '8' && signature[5] == ']', "invalid or duplicate clip or cull distance output");
@@ -131,7 +133,8 @@ struct Module {
                 return;
             }
             if (stage == Stage::TessellationControl || stage == Stage::TessellationEvaluation) {
-                Require(input && ((value == spv::BuiltInPosition && signature == "f32x4") || (value == spv::BuiltInTessCoord && stage == Stage::TessellationEvaluation && signature == "f32x3") || ((value == spv::BuiltInInvocationId || value == spv::BuiltInPrimitiveId || value == spv::BuiltInPatchVertices) && (signature == "i32" || signature == "u32"))), "unsupported tessellation built-in");
+                const bool distances = (value == spv::BuiltInClipDistance || value == spv::BuiltInCullDistance) && signature.size() == 6 && signature.starts_with("f32[") && signature[4] >= '1' && signature[4] <= '8' && signature[5] == ']';
+                Require(input && (distances || (value == spv::BuiltInPosition && signature == "f32x4") || (value == spv::BuiltInTessCoord && stage == Stage::TessellationEvaluation && signature == "f32x3") || ((value == spv::BuiltInInvocationId || value == spv::BuiltInPrimitiveId || value == spv::BuiltInPatchVertices) && (signature == "i32" || signature == "u32"))), "unsupported tessellation built-in");
                 return;
             }
             if (!input && value == spv::BuiltInPrimitiveTriangleIndicesEXT) primitiveIndices = true;
@@ -250,10 +253,10 @@ Module Inspect(const CompiledShader& compiled, const State& state, const VkPhysi
                     fragment &&
                     capability == spv::CapabilityStencilExportEXT;
 
-                if ((vertex || evaluation) && (capability == spv::CapabilityClipDistance || capability == spv::CapabilityCullDistance)) {
+                if ((vertex || control || evaluation) && (capability == spv::CapabilityClipDistance || capability == spv::CapabilityCullDistance)) {
                     char word[16];
                     std::snprintf(word, sizeof(word), "0x%08x", state.paClVsOutCntl);
-                    Require(capability == spv::CapabilityClipDistance ? shaderClipDistance : vertex && shaderCullDistance, std::string("vertex clip or cull distance needs shaderClipDistance or shaderCullDistance, which the device lacks (PA_CL_VS_OUT_CNTL=") + word + ")");
+                    Require(capability == spv::CapabilityClipDistance ? shaderClipDistance : shaderCullDistance, std::string("vertex clip or cull distance needs shaderClipDistance or shaderCullDistance, which the device lacks (PA_CL_VS_OUT_CNTL=") + word + ")");
                 }
 
                 // Enabled unconditionally or by the device setup in VulkanDevice.
@@ -262,12 +265,12 @@ Module Inspect(const CompiledShader& compiled, const State& state, const VkPhysi
                     capability == spv::CapabilityImage1D ||
                     capability == spv::CapabilityImageGatherExtended ||
                     capability == spv::CapabilityImageQuery ||
-                    ((vertex || evaluation) && shaderClipDistance && capability == spv::CapabilityClipDistance) ||
+                    ((vertex || control || evaluation) && shaderClipDistance && capability == spv::CapabilityClipDistance) ||
                     (fragment && geometryShader && capability == spv::CapabilityGeometry) ||
                     (fragment && sampleRateShading && capability == spv::CapabilitySampleRateShading) ||
                     capability == spv::CapabilityImageMSArray ||
                     capability == spv::CapabilityStorageImageMultisample ||
-                    (vertex && shaderCullDistance && capability == spv::CapabilityCullDistance) ||
+                    ((vertex || control || evaluation) && shaderCullDistance && capability == spv::CapabilityCullDistance) ||
                     capability == spv::CapabilityStorageImageWriteWithoutFormat ||
                     capability == spv::CapabilityStorageImageReadWithoutFormat ||
                     capability == spv::CapabilityInt64 ||
