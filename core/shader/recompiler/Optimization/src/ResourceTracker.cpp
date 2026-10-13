@@ -1293,7 +1293,8 @@ private:
         const bool flatVolumeQuery = op == IrOpcode::ImageQueryDimensions;
         image.flatVolumeCompatible = image.flatVolumeCompatible && (flatVolumeLoad || flatVolumeSample || flatVolumeQuery) && !memory.imagePacked && memory.imageByElements == 0u;
         const bool flatLineLoad = op == IrOpcode::ImageRead && !memory.imageHasMip && memory.imageSampleFlags == 0u;
-        const bool flatLineSample = op == IrOpcode::ImageSampleRaw && (memory.imageSampleFlags == RdnaImageSampleFlagLevelZero || memory.imageSampleFlags == 0u);
+        const auto lineFlags = memory.imageSampleFlags & ~static_cast<std::uint32_t>(RdnaImageSampleFlagCompare);
+        const bool flatLineSample = op == IrOpcode::ImageSampleRaw && (lineFlags == RdnaImageSampleFlagLevelZero || lineFlags == 0u || lineFlags == RdnaImageSampleFlagLod || lineFlags == RdnaImageSampleFlagBias);
         image.flatLineCompatible = image.flatLineCompatible && (flatLineLoad || flatLineSample) && !memory.imagePacked && memory.imageByElements == 0u;
         if ((memory.imageSampleFlags & RdnaImageSampleFlagCompare) != 0u) {
             constexpr auto unsupported = RdnaImageSampleFlagLod | RdnaImageSampleFlagDerivative;

@@ -1282,7 +1282,8 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
     if (access.slot != 0) ctx.Fail(access.inst, "compares against a color texture through a bindless image table, which is not implemented");
     if (HasFlag(mem, RdnaImageSampleFlagDerivative) || HasFlag(mem, RdnaImageSampleFlagLod)) ctx.Fail(access.inst, "compares against a color texture with gradients or an explicit LOD, which is not implemented");
     const bool arrayed = image.dimension == RdnaImageDimension::Dim2DArray;
-    if (image.dimension != RdnaImageDimension::Dim2D && !arrayed) ctx.Fail(access.inst, "compares against a color texture that is not a 2D or 2D array view, which is not implemented");
+    const bool line = image.dimension == RdnaImageDimension::Dim1D;
+    if (image.dimension != RdnaImageDimension::Dim2D && !arrayed && !line) ctx.Fail(access.inst, "compares against a color texture that is not a 1D, 2D or 2D array view, which is not implemented");
     const auto f32 = TypeF32(state);
     const auto i32 = TypeI32(state);
     const auto u32 = TypeU32(state);
@@ -1303,8 +1304,8 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
     state.module.EmitCapability(spv::CapabilityImageQuery);
     const auto size = state.module.AllocateId();
     state.module.AddFunction(spv::OpImageQuerySizeLod, ImageViewSizeType(state, image.dimension), size, descriptor, ConstantU32(state, 0u));
-    const auto width = Unary(state, spv::OpBitcast, i32, extract(u32, size, 0u));
-    const auto height = Unary(state, spv::OpBitcast, i32, extract(u32, size, 1u));
+    const auto width = Unary(state, spv::OpBitcast, i32, line ? size : extract(u32, size, 0u));
+    const auto height = line ? ConstantI32(state, 1) : Unary(state, spv::OpBitcast, i32, extract(u32, size, 1u));
     auto layer = ConstantU32(state, 0u);
     if (arrayed) {
         const auto layers = Unary(state, spv::OpBitcast, i32, extract(u32, size, 2u));
@@ -1336,14 +1337,15 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
         const auto ux = Unary(state, spv::OpBitcast, u32, address(x, width, modeX));
         const auto uy = Unary(state, spv::OpBitcast, u32, address(y, height, modeY));
         const auto coord = state.module.AllocateId();
-        if (arrayed) state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 3), coord, ux, uy, layer);
+        if (line) state.module.AddFunction(spv::OpCopyObject, u32, coord, ux);
+        else if (arrayed) state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 3), coord, ux, uy, layer);
         else state.module.AddFunction(spv::OpCompositeConstruct, TypeU32Vector(state, 2), coord, ux, uy);
         const auto texel = state.module.AllocateId();
         state.module.AddFunction(spv::OpImageFetch, ImageVectorType(state, IrTextureNumericClass::Float, 4), texel, descriptor, coord, spv::ImageOperandsLodMask, ConstantU32(state, 0u));
         auto red = extract(f32, texel, 3u);
         for (std::uint32_t channel = 3u; channel-- > 0u;) red = Select(state, f32, equal(RuntimeImageSwizzle(state, mem.resource, channel), 4u), extract(f32, texel, channel), red);
         red = Select(state, f32, equal(modeX, EmulatedCompare::AddressBorder), Select(state, f32, inside(x, width), red, borderRed), red);
-        red = Select(state, f32, equal(modeY, EmulatedCompare::AddressBorder), Select(state, f32, inside(y, height), red, borderRed), red);
+        if (!line) red = Select(state, f32, equal(modeY, EmulatedCompare::AddressBorder), Select(state, f32, inside(y, height), red, borderRed), red);
         constexpr std::array<spv::Op, 6> operations{spv::OpFOrdLessThan, spv::OpFOrdEqual, spv::OpFOrdLessThanEqual, spv::OpFOrdGreaterThan, spv::OpFOrdNotEqual, spv::OpFOrdGreaterThanEqual};
         auto result = Select(state, f32, equal(parameter(0u), 7u), one, zero);
         for (std::uint32_t index = 0; index < operations.size(); ++index) {
@@ -1353,8 +1355,8 @@ void EmitEmulatedCompareSample(SpirvValueEmitContext& ctx, const ImageEmitAccess
         result = Select(state, f32, equal(parameter(4u), EmulatedCompare::ReferenceZero), zero, result);
         return result;
     };
-    const auto scaledU = Binary(state, spv::OpFMul, f32, extract(f32, setup.coord, 0u), Unary(state, spv::OpConvertSToF, f32, width));
-    const auto scaledV = Binary(state, spv::OpFMul, f32, extract(f32, setup.coord, 1u), Unary(state, spv::OpConvertSToF, f32, height));
+    const auto scaledU = Binary(state, spv::OpFMul, f32, line ? setup.coord : extract(f32, setup.coord, 0u), Unary(state, spv::OpConvertSToF, f32, width));
+    const auto scaledV = line ? f32Constant(0.0f) : Binary(state, spv::OpFMul, f32, extract(f32, setup.coord, 1u), Unary(state, spv::OpConvertSToF, f32, height));
     auto offsetX = ConstantI32(state, 0);
     auto offsetY = ConstantI32(state, 0);
     if (setup.layout.offset != NoImageComponent) {

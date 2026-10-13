@@ -734,6 +734,11 @@ std::vector<ImageResource> ResourceMaterializer::RuntimeImageModes(const ImageRe
         mode.packedFormat = IrBufferFormat::Invalid;
         mode.shaderSwizzle = ShaderImageIdentitySwizzle;
         modes.push_back(mode);
+        if (image.dimension == RdnaImageDimension::Dim2D && image.flatLineCompatible) {
+            auto line = mode;
+            line.dimension = RdnaImageDimension::Dim1D;
+            modes.push_back(line);
+        }
         if (image.dimension == RdnaImageDimension::Dim2DArray) {
             auto plain = mode;
             plain.dimension = RdnaImageDimension::Dim2D;
