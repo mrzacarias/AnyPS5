@@ -23,6 +23,10 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 #include <map>
 #include <mutex>
 #include <set>
@@ -157,6 +161,7 @@ void _readFile(const Apr::ReadFileCommand& command) {
     const auto file = _file(command.fileId);
     static const bool trace = std::getenv("APS5_TRACE_APR") != nullptr;
     if (trace) std::fprintf(stderr, "[apr] read %s offset=0x%llx size=0x%llx -> 0x%llx\n", file.path.string().c_str(), static_cast<unsigned long long>(command.offset), static_cast<unsigned long long>(command.size), static_cast<unsigned long long>(command.destination));
+#ifdef _WIN32
     std::ifstream stream(file.path, std::ios::binary);
     if (!stream) throw std::runtime_error("APR: cannot open " + file.path.string());
     stream.seekg(static_cast<std::streamoff>(command.offset));
@@ -166,6 +171,26 @@ void _readFile(const Apr::ReadFileCommand& command) {
     if (stream.bad()) throw std::runtime_error("APR: read failed for " + file.path.string());
     const auto read = static_cast<std::uint64_t>(stream.gcount());
     if (read != command.size) throw std::runtime_error("APR: read of " + file.path.string() + " at offset " + std::to_string(command.offset) + " returned " + std::to_string(read) + " of " + std::to_string(command.size) + " bytes");
+#else
+    const int descriptor = ::open(file.path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (descriptor < 0) throw std::runtime_error("APR: cannot open " + file.path.string() + ", errno=" + std::to_string(errno));
+    const GuestArena::HostWrite destination(reinterpret_cast<void*>(command.destination), command.size);
+    if (!destination.Open()) {
+        ::close(descriptor);
+        throw std::runtime_error("APR: the read destination of " + file.path.string() + " is not writable guest memory");
+    }
+    std::uint64_t read = 0;
+    int error = 0;
+    while (read < command.size) {
+        const auto count = ::pread(descriptor, reinterpret_cast<char*>(command.destination) + read, command.size - read, static_cast<off_t>(command.offset + read));
+        if (count < 0 && errno == EINTR) continue;
+        if (count < 0) error = errno;
+        if (count <= 0) break;
+        read += static_cast<std::uint64_t>(count);
+    }
+    ::close(descriptor);
+    if (read != command.size) throw std::runtime_error("APR: read of " + file.path.string() + " at offset " + std::to_string(command.offset) + " returned " + std::to_string(read) + " of " + std::to_string(command.size) + " bytes, errno=" + std::to_string(error));
+#endif
 }
 
 void _writeAddress(const Apr::WriteAddressCommand& command) {
