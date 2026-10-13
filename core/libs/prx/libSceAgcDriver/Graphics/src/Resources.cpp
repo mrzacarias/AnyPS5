@@ -37,7 +37,7 @@ VkBuffer BindExactBuffer(const Context& context, std::size_t size, VkBufferUsage
 
 }
 
-Buffer::Buffer(const Context& context, std::size_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties) : context(context), size(size), capacity(BufferPool::Capacity(size, properties)), usage(BufferPool::Usage(usage, properties)), properties(properties) {
+Buffer::Buffer(const Context& context, std::size_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool rangeBound) : context(context), size(size), capacity(BufferPool::Capacity(size, properties)), bufferBytes(size), usage(BufferPool::Usage(usage, properties)), properties(properties) {
     Require(size != 0, "zero-sized GPU buffer");
     const bool addressable = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0;
     Require(!addressable || context.bufferDeviceAddress, "buffer device address is not enabled");
@@ -51,12 +51,14 @@ Buffer::Buffer(const Context& context, std::size_t size, VkBufferUsageFlags usag
         capacity = allocation->bytes;
         offset = allocation->offset;
         slab = allocation->slab;
-        if (allocation->bufferBytes != size) {
+        bufferBytes = allocation->bufferBytes;
+        if (bufferBytes != size && !(rangeBound && bufferBytes >= size)) {
             context.Function<PFN_vkDestroyBuffer>("vkDestroyBuffer")(context.device, buffer, nullptr);
             buffer = VK_NULL_HANDLE;
             deviceAddress = 0;
             try {
-                buffer = BindExactBuffer(context, size, this->usage, memory, offset, allocationBytes);
+                bufferBytes = rangeBound ? capacity : size;
+                buffer = BindExactBuffer(context, bufferBytes, this->usage, memory, offset, allocationBytes);
                 initializeAddress(usage);
             } catch (...) {
                 release();
@@ -120,7 +122,7 @@ Buffer::~Buffer() {
 
 void Buffer::release() noexcept {
     if (ready && cache) {
-        cache->Put({buffer, memory, mapping, deviceAddress, allocationBytes, capacity, usage, properties, offset, slab, size});
+        cache->Put({buffer, memory, mapping, deviceAddress, allocationBytes, capacity, usage, properties, offset, slab, bufferBytes});
         return;
     }
     if (slab) {

@@ -234,9 +234,18 @@ std::optional<BufferAllocation> BufferPool::Take(std::size_t bytes, VkBufferUsag
         ++tier.misses;
         return std::nullopt;
     }
-    auto result = found->second.back().allocation;
-    found->second.pop_back();
-    if (found->second.empty()) tier.free.erase(found);
+    auto& entries = found->second;
+    auto pick = std::prev(entries.end());
+    std::size_t scanned = 0;
+    for (auto it = entries.rbegin(); it != entries.rend() && scanned < 64; ++it, ++scanned) {
+        if (it->allocation.bufferBytes == bytes) {
+            pick = std::prev(it.base());
+            break;
+        }
+    }
+    auto result = pick->allocation;
+    entries.erase(pick);
+    if (entries.empty()) tier.free.erase(found);
     --tier.slots;
     tier.retainedBytes -= result.allocationBytes;
     ++tier.hits;

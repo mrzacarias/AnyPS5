@@ -8,7 +8,9 @@ namespace AgcDriver::Graphics {
 
 class Buffer {
 public:
-    Buffer(const Context& context, std::size_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    // rangeBound: every descriptor of the buffer carries the requested size as its range, so a
+    // pooled VkBuffer of the size class serves it as is instead of being recreated at that size.
+    Buffer(const Context& context, std::size_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, bool rangeBound = false);
     ~Buffer();
     Buffer(const Buffer&) = delete;
     Buffer& operator=(const Buffer&) = delete;
@@ -30,6 +32,7 @@ private:
     void* mapping = nullptr;
     std::size_t size;
     std::size_t capacity;
+    std::size_t bufferBytes;
     // Fully made (or taken from the pool), so release returns it to the pool instead of destroying
     // the handles a failed construction left.
     bool ready = false;
