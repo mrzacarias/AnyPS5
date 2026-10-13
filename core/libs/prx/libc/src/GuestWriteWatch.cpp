@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <dlfcn.h>
 #include <iterator>
 #include <map>
 #include <mutex>
@@ -506,6 +507,32 @@ private:
     static void fault(int signal, siginfo_t* info, void* context) {
         auto& watch = Get();
         if (watch.record(reinterpret_cast<std::uintptr_t>(info->si_addr))) return;
+#if defined(__APPLE__) && defined(__aarch64__)
+        static const bool traceFaults = std::getenv("APS5_TRACE_FAULTS") != nullptr;
+        if (traceFaults) {
+            const auto& state = static_cast<ucontext_t*>(context)->uc_mcontext->__ss;
+            std::fprintf(stderr, "[fault] signal %d at %p pc %#llx lr %#llx sp %#llx thread %p\n", signal, info->si_addr, static_cast<unsigned long long>(state.__pc), static_cast<unsigned long long>(state.__lr), static_cast<unsigned long long>(state.__sp), static_cast<void*>(pthread_self()));
+            const auto describe = [](const char* role, std::uintptr_t address) {
+                Dl_info found{};
+                if (dladdr(reinterpret_cast<const void*>(address), &found) != 0) {
+                    std::fprintf(stderr, "[fault]   %s %#lx %s+%#lx (%s+%#lx)\n", role, static_cast<unsigned long>(address), found.dli_fname != nullptr ? found.dli_fname : "?", static_cast<unsigned long>(address - reinterpret_cast<std::uintptr_t>(found.dli_fbase)), found.dli_sname != nullptr ? found.dli_sname : "?", found.dli_saddr != nullptr ? static_cast<unsigned long>(address - reinterpret_cast<std::uintptr_t>(found.dli_saddr)) : 0ul);
+                } else {
+                    std::fprintf(stderr, "[fault]   %s %#lx (no image)\n", role, static_cast<unsigned long>(address));
+                }
+            };
+            describe("pc", static_cast<std::uintptr_t>(state.__pc));
+            describe("lr", static_cast<std::uintptr_t>(state.__lr));
+            auto frame = static_cast<std::uintptr_t>(state.__fp);
+            for (int depth = 0; depth < 24 && frame != 0 && (frame & 7u) == 0; ++depth) {
+                const auto* words = reinterpret_cast<const std::uintptr_t*>(frame);
+                const auto ret = words[1];
+                if (ret == 0) break;
+                describe("frame", ret);
+                if (words[0] <= frame) break;
+                frame = words[0];
+            }
+        }
+#endif
         const auto& previous = signal == SIGBUS ? watch._previousBus : watch._previousSegv;
         if ((previous.sa_flags & SA_SIGINFO) != 0 && previous.sa_sigaction != nullptr) {
             previous.sa_sigaction(signal, info, context);
