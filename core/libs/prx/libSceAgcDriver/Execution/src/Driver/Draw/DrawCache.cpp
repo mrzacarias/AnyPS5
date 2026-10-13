@@ -6,6 +6,7 @@
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <bit>
 #include <cstdlib>
+#include <utility>
 
 namespace AgcDriver::DriverDetail {
 
@@ -101,6 +102,9 @@ bool Driver::admitDrawKey(std::uint64_t key) {
 }
 
 void Driver::insertDrawEntry(std::uint64_t key, std::vector<std::shared_ptr<DispatchVariant>>& fresh, std::shared_ptr<const DrawDecode> decode, std::uint64_t shape) {
+    // The entries this insert evicts or replaces are released after the unlock (declared first, so
+    // destroyed last): freeing their variants under the mutex held every other draw behind it.
+    std::vector<std::shared_ptr<DrawEntry>> released;
     std::lock_guard cacheLock(drawCacheMutex);
     auto& counters = drawEntryCounters;
     ++counters.inserts;
@@ -141,7 +145,7 @@ void Driver::insertDrawEntry(std::uint64_t key, std::vector<std::shared_ptr<Disp
     } else {
         replacement->order = found->second->order;
         drawOrder.splice(drawOrder.begin(), drawOrder, replacement->order);
-        found->second = std::move(replacement);
+        released.push_back(std::exchange(found->second, std::move(replacement)));
     }
     while (drawCache.size() > drawCacheEntries()) {
         const auto last = drawCache.find(drawOrder.back());
@@ -151,6 +155,7 @@ void Driver::insertDrawEntry(std::uint64_t key, std::vector<std::shared_ptr<Disp
         if (traceDrawCache()) traceInsert(traceKeysEvicted, last->first);
         if (const auto shapeOf = drawShapes.find(last->second->shape); shapeOf != drawShapes.end() && shapeOf->second == last->first) drawShapes.erase(shapeOf);
         drawOrder.erase(last->second->order);
+        released.push_back(std::move(last->second));
         drawCache.erase(last);
         ++drawCacheEvictions;
         ++counters.evictions;

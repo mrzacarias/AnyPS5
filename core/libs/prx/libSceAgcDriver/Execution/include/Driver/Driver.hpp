@@ -345,7 +345,7 @@ private:
     std::unordered_map<std::uint64_t, std::shared_ptr<DrawEntry>> drawAliases;
     DrawRelocationPending drawRelocationPending;
     DrawRelocationCounters drawRelocationCounters;
-    std::mutex drawCacheMutex;
+    SpinFirstMutex drawCacheMutex;
     std::uint64_t drawCacheHits = 0, drawCacheEvictions = 0, drawCacheVariants = 0, drawCacheVariantBytes = 0;
     std::optional<DrawKeySightings> drawKeySightings;
 

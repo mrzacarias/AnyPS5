@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include "prx/libc/include/general/AtomicSharedPtr.hpp"
 
@@ -89,6 +90,29 @@ struct DrawEntryCounters {
     std::uint64_t differingSameRuns = 0, differingWords = 0, differingRunsChanged = 0;
     std::uint64_t dataHits = 0, dataStagesReused = 0, dataStagesCompiled = 0, dataVerified = 0;
     std::chrono::steady_clock::time_point lastReport = std::chrono::steady_clock::now();
+};
+
+// The draw cache's mutex, taken with a short try_lock spin first: its sections are short, but the packet
+// worker and the prefetch helpers (APS5_DRAW_PREFETCH) take it on every draw, and a contended std::mutex
+// waits in the kernel at once (__psynch_mutexwait on macOS).
+class SpinFirstMutex {
+public:
+    void lock() {
+        for (int spin = 0; spin < 128; ++spin) {
+            if (mutex.try_lock()) return;
+#if defined(__aarch64__)
+            __builtin_arm_isb(15);
+#else
+            __builtin_ia32_pause();
+#endif
+        }
+        mutex.lock();
+    }
+    bool try_lock() { return mutex.try_lock(); }
+    void unlock() { mutex.unlock(); }
+
+private:
+    std::mutex mutex;
 };
 
 class DrawKeySightings {
