@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -97,7 +98,7 @@ int APS5_VABI sceVideoOutRegisterBuffers2(int handle, int setIndex, int bufferIn
     for (int i = 0; i < bufferNum; ++i) {
         registered[i] = {setIndex, reinterpret_cast<uint64_t>(buffers[i].data), reinterpret_cast<uint64_t>(buffers[i].metadata)};
         const auto display = DescribeVideoOutBuffer(registered[i], group);
-        AgcDriverCheckGuestMemory_nid_postfix(buffers[i].data, AgcDriverDisplayBufferSize_nid_postfix(display), 65536);
+        AgcDriverCheckGuestMemory_nid_postfix(buffers[i].data, AgcDriverDisplayBufferSize_nid_postfix(display), AgcDriverDisplayBufferAlignment_nid_postfix(display));
     }
     cfg->groups[setIndex] = group;
     cfg->width = attribute->width;
@@ -106,6 +107,61 @@ int APS5_VABI sceVideoOutRegisterBuffers2(int handle, int setIndex, int bufferIn
         cfg->buffers[bufferIndexStart + i] = registered[i];
     }
     return 0;
+} catch (const ProcessShutdown&) {
+    LibcAwaitExit_nid_postfix();
+}
+
+void APS5_VABI sceVideoOutSetBufferAttribute(VideoOutBufferAttribute* attribute, uint32_t pixelFormat, uint32_t tilingMode, uint32_t aspectRatio, uint32_t width, uint32_t height, uint32_t pitchInPixel) {
+    if (attribute == nullptr) {
+        throw std::runtime_error("sceVideoOutSetBufferAttribute: null attribute");
+    }
+    std::memset(attribute, 0, sizeof(VideoOutBufferAttribute));
+    attribute->pixel_format = pixelFormat;
+    attribute->tiling_mode = tilingMode;
+    attribute->aspect_ratio = aspectRatio;
+    attribute->width = width;
+    attribute->height = height;
+    attribute->pitch_in_pixel = pitchInPixel;
+}
+
+int APS5_VABI sceVideoOutRegisterBuffers(int handle, int bufferIndexStart, void* const* addresses, int bufferNum, const VideoOutBufferAttribute* attribute) try {
+    auto cfg = VideoOutDriver::Get().GetConfig(handle);
+    if (cfg == nullptr) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_HANDLE");
+    }
+    if (addresses == nullptr) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_ADDRESS");
+    }
+    if (attribute == nullptr) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_OPTION");
+    }
+    if (bufferNum < 1 || bufferNum > VIDEO_OUT_BUFFER_NUM_MAX) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_VALUE");
+    }
+    AgcDriverCheckGuestMemory_nid_postfix(attribute, sizeof(*attribute), alignof(VideoOutBufferAttribute));
+    AgcDriverCheckGuestMemory_nid_postfix(addresses, static_cast<std::size_t>(bufferNum) * sizeof(*addresses), alignof(void*));
+    if (attribute->reserved0 != 0 || attribute->reserved1 != 0) throw std::runtime_error("VideoOut: reserved buffer attribute bits are set");
+    VideoOutBufferAttribute2 converted{};
+    converted.tiling_mode = attribute->tiling_mode;
+    converted.aspect_ratio = attribute->aspect_ratio;
+    converted.width = attribute->width;
+    converted.height = attribute->height;
+    converted.pitch_in_pixel = attribute->pitch_in_pixel;
+    converted.option = attribute->option;
+    converted.pixel_format = (static_cast<std::uint64_t>(attribute->pixel_format & 0xFFFF0000u) << 32) | (static_cast<std::uint64_t>(attribute->pixel_format & 0xFFFFu) << 16);
+    std::array<VideoOutBuffers, VIDEO_OUT_BUFFER_NUM_MAX> buffers{};
+    for (int i = 0; i < bufferNum; ++i) buffers[i].data = addresses[i];
+    int setIndex = 0;
+    {
+        std::unique_lock lock(cfg->mutex);
+        cfg->Check();
+        while (setIndex < VIDEO_OUT_BUFFER_ATTRIBUTE_NUM_MAX && cfg->groups[setIndex].occupied) ++setIndex;
+    }
+    if (setIndex == VIDEO_OUT_BUFFER_ATTRIBUTE_NUM_MAX) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_INDEX");
+    }
+    const int result = sceVideoOutRegisterBuffers2(handle, setIndex, bufferIndexStart, buffers.data(), bufferNum, &converted, VIDEO_OUT_BUFFER_ATTRIBUTE_CATEGORY_UNCOMPRESSED, nullptr);
+    return result < 0 ? result : setIndex;
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();
 }
@@ -135,7 +191,7 @@ int APS5_VABI sceVideoOutSubmitChangeBufferAttribute2(int handle, int setIndex, 
     for (int i = 0; i < VIDEO_OUT_BUFFER_NUM_MAX; ++i) {
         if (cfg->buffers[i].groupIndex != setIndex) continue;
         const auto display = DescribeVideoOutBuffer(cfg->buffers[i], group);
-        AgcDriverCheckGuestMemory_nid_postfix(reinterpret_cast<const void*>(display.address), AgcDriverDisplayBufferSize_nid_postfix(display), 65536);
+        AgcDriverCheckGuestMemory_nid_postfix(reinterpret_cast<const void*>(display.address), AgcDriverDisplayBufferSize_nid_postfix(display), AgcDriverDisplayBufferAlignment_nid_postfix(display));
     }
     cfg->groups[setIndex] = group;
     return 0;

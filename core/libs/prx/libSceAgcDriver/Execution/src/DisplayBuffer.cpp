@@ -113,6 +113,10 @@ void traceDisplayKeys(const DisplayBuffer& buffer, const std::uint8_t* keys, std
 
 }
 
+std::size_t DisplayBufferAlignment(const DisplayBuffer& buffer) {
+    return buffer.tilingMode == 1 ? 4096u : 65536u;
+}
+
 std::size_t DisplayBufferSize(const DisplayBuffer& buffer) {
     require(buffer.width != 0 && buffer.height != 0 && buffer.width <= 16384 && buffer.height <= 16384, "VideoOut: invalid display buffer dimensions");
     const bool halfFloat = DisplayHalfFloat(buffer.pixelFormat);
@@ -122,8 +126,8 @@ std::size_t DisplayBufferSize(const DisplayBuffer& buffer) {
         throw std::runtime_error(message);
     }
     require(!halfFloat || buffer.dccAddress == 0, "VideoOut: DCC metadata on a 16-bit float display buffer is not implemented");
-    require(buffer.address != 0 && (buffer.address & 65535u) == 0, "VideoOut: display buffer requires 64 KiB alignment");
     require(buffer.tilingMode <= 1, "VideoOut: unsupported display tiling mode");
+    require(buffer.address != 0 && buffer.address % DisplayBufferAlignment(buffer) == 0, buffer.tilingMode == 1 ? "VideoOut: linear display buffer requires 4 KiB alignment" : "VideoOut: display buffer requires 64 KiB alignment");
     require(buffer.tilingMode != 0 || buffer.pitchInPixel == 0, "VideoOut: tiled display pitch is unsupported");
     require(buffer.dccAddress == 0 || buffer.tilingMode == 0, "VideoOut: a linear display buffer cannot carry DCC metadata");
     require(buffer.dccAddress != 0 || buffer.dccClearColor == 0, "VideoOut: a DCC clear color needs DCC metadata");
@@ -234,7 +238,7 @@ std::vector<std::byte> ReadDisplayBuffer(const DisplayBuffer& buffer) {
         std::fprintf(stderr, "[gpu] scanout display buffer 0x%llx %ux%u format 0x%016llx at %.1f s\n", static_cast<unsigned long long>(buffer.address), buffer.width, buffer.height, static_cast<unsigned long long>(buffer.pixelFormat), std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
     }
     GuestMemory::FlushGpuWrites(buffer.address, size);
-    GuestMemory::CheckRange(reinterpret_cast<const void*>(buffer.address), size, 65536);
+    GuestMemory::CheckRange(reinterpret_cast<const void*>(buffer.address), size, DisplayBufferAlignment(buffer));
     const auto* source = reinterpret_cast<const std::byte*>(buffer.address);
     return DecodeDisplayBuffer(buffer, {source, size});
 }
@@ -243,4 +247,8 @@ std::vector<std::byte> ReadDisplayBuffer(const DisplayBuffer& buffer) {
 
 extern "C" std::size_t AgcDriverDisplayBufferSize_nid_postfix(const AgcDriver::DisplayBuffer& buffer) {
     return AgcDriver::DisplayBufferSize(buffer);
+}
+
+extern "C" std::size_t AgcDriverDisplayBufferAlignment_nid_postfix(const AgcDriver::DisplayBuffer& buffer) {
+    return AgcDriver::DisplayBufferAlignment(buffer);
 }

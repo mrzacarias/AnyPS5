@@ -25,6 +25,7 @@ struct DisplayBuffer {
 };
 
 std::size_t DisplayBufferSize(const DisplayBuffer& buffer);
+std::size_t DisplayBufferAlignment(const DisplayBuffer& buffer);
 std::size_t DisplayBufferOffset(const DisplayBuffer& buffer, std::uint32_t x, std::uint32_t y);
 std::vector<std::byte> DecodeDisplayBuffer(const DisplayBuffer& buffer, std::span<const std::byte> source);
 std::vector<std::byte> ReadDisplayBuffer(const DisplayBuffer& buffer);
@@ -35,5 +36,6 @@ Graphics::DccKeys DisplayBufferKeys(const DisplayBuffer& buffer);
 }
 
 extern "C" std::size_t AgcDriverDisplayBufferSize_nid_postfix(const AgcDriver::DisplayBuffer& buffer);
+extern "C" std::size_t AgcDriverDisplayBufferAlignment_nid_postfix(const AgcDriver::DisplayBuffer& buffer);
 
 #endif

@@ -1912,6 +1912,18 @@ struct VideoOutBufferAttribute2 {
     std::uint64_t reserved1[3];
 };
 
+struct VideoOutBufferAttribute {
+    std::uint32_t pixel_format;
+    std::uint32_t tiling_mode;
+    std::uint32_t aspect_ratio;
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t pitch_in_pixel;
+    std::uint32_t option;
+    std::uint32_t reserved0;
+    std::uint64_t reserved1;
+};
+
 struct VideoOutBuffers {
     const void* data;
     const void* metadata;
