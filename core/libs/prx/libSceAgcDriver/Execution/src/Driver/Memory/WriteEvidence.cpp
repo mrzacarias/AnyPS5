@@ -205,6 +205,16 @@ ShaderMemory::PendingWrite Driver::classifyPendingWrite(std::uint64_t address, s
 }
 
 ShaderMemory::PendingWrite Driver::queryPendingWrite(std::uint64_t address, std::size_t bytes, std::span<std::byte> known) {
+    if (prefetchingDraw()) {
+        // A prefetch reads ahead of the draws queued before its draw: anything pending is the worker's.
+        auto& pipeline = DrawPipeline::Queue0();
+        if (pipeline.Busy() && pipeline.Overlaps(address, bytes)) throw std::runtime_error("draw prefetch: a queued draw writes the capture");
+        PendingView pending;
+        pending.Load();
+        std::uint64_t ValidateCounters::*reason = nullptr;
+        if (Get().classifyPendingWrite(address, bytes, reason, pending, known) != ShaderMemory::PendingWrite::None) throw std::runtime_error("draw prefetch: a pending write overlaps the capture");
+        return ShaderMemory::PendingWrite::None;
+    }
     if (DrawPipeline::Active()) {
         auto& pipeline = DrawPipeline::Queue0();
         if (pipeline.Busy() && pipeline.Overlaps(address, bytes)) pipeline.Drain(DrawPipeline::DrainReason::Capture);

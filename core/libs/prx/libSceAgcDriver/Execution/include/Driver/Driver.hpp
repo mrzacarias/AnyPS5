@@ -267,6 +267,13 @@ private:
     void resolveGroupAhead(const Submission& submission, const QueueState& live, std::size_t from);
     static void clearResolvedAhead();
     static void reportGroupCapture(std::uint32_t queue);
+    // APS5_DRAW_PREFETCH (DrawPrefetch.cpp): helper threads build the draw-cache entries of a queue-0
+    // submission's draws ahead of the packet worker; prefetchingDraw is set on those threads.
+    static bool& prefetchingDraw();
+    void prefetchDraws(const Submission& submission, const QueueState& queue);
+    static void notePrefetchProgress(std::size_t cursor);
+    static void endPrefetch();
+    void runDrawPrefetch(std::size_t helper);
     static PollStats& pollStats();
     static WaitOutcomes& waitOutcomes();
     static Graphics::Recorder::LateStatistics& lateCountsSeen();
@@ -345,7 +352,7 @@ private:
     std::unordered_map<std::uint64_t, std::shared_ptr<DrawEntry>> drawAliases;
     DrawRelocationPending drawRelocationPending;
     DrawRelocationCounters drawRelocationCounters;
-    std::mutex drawCacheMutex;
+    SpinFirstMutex drawCacheMutex;
     std::uint64_t drawCacheHits = 0, drawCacheEvictions = 0, drawCacheVariants = 0, drawCacheVariantBytes = 0;
     std::optional<DrawKeySightings> drawKeySightings;
 
