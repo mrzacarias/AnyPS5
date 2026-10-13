@@ -1,5 +1,6 @@
 #include "prx/libkernel/AppMetadata/include/AppMetadata.hpp"
 #include "prx/libkernel/AppMetadata/include/ParamJsonParser.hpp"
+#include "prx/libkernel/AppMetadata/include/ParamSfoParser.hpp"
 #include "prx/libc/include/General.hpp"
 
 #include <cstdint>
@@ -23,6 +24,7 @@ std::int32_t g_userDefinedParams[4] = {};
 std::vector<std::uint8_t> g_iconBytes;
 
 constexpr const char* AppMetadataParamJsonGuestPath = "/app0/sce_sys/param.json";
+constexpr const char* AppMetadataParamSfoGuestPath = "/app0/sce_sys/param.sfo";
 constexpr const char* AppMetadataIconGuestPath = "/app0/sce_sys/icon0.png";
 
 void copyToFixedBuffer(char* destination, std::size_t destinationSize, const std::string& source) {
@@ -31,11 +33,21 @@ void copyToFixedBuffer(char* destination, std::size_t destinationSize, const std
     std::memcpy(destination, source.c_str(), source.size() + 1);
 }
 
+std::filesystem::path findParam(const std::filesystem::path& paramJson, const std::filesystem::path& paramSfo) {
+    if (std::filesystem::exists(paramJson)) return paramJson;
+    if (std::filesystem::exists(paramSfo)) return paramSfo;
+    return {};
+}
+
+ParsedParamJson parseParam(const std::filesystem::path& path) {
+    return path.extension() == ".sfo" ? parseParamSfo(path) : parseParamJson(path);
+}
+
 void ensureTitleLoaded() {
     if (g_titleLoaded) return;
-    const auto resolvedPath = ResolvePath_nid_no_patch(AppMetadataParamJsonGuestPath);
-    if (!std::filesystem::exists(resolvedPath)) throw std::runtime_error("param.json not found");
-    const auto parsed = parseParamJson(resolvedPath);
+    const auto resolvedPath = findParam(ResolvePath_nid_no_patch(AppMetadataParamJsonGuestPath), ResolvePath_nid_no_patch(AppMetadataParamSfoGuestPath));
+    if (resolvedPath.empty()) throw std::runtime_error("param.json or param.sfo not found");
+    const auto parsed = parseParam(resolvedPath);
     copyToFixedBuffer(g_title, sizeof(g_title), parsed.title);
     copyToFixedBuffer(g_titleId, sizeof(g_titleId), parsed.titleId);
     g_downloadDataSizeMiB = parsed.downloadDataSizeMiB;
@@ -47,8 +59,8 @@ void ensureTitleLoaded() {
 const bool g_downloadDataMounted = [] {
     try {
         const auto run = std::filesystem::current_path();
-        const auto paramJson = run / "app0" / "sce_sys" / "param.json";
-        if (!std::filesystem::exists(paramJson) || parseParamJson(paramJson).downloadDataSizeMiB == 0) return false;
+        const auto param = findParam(run / "app0" / "sce_sys" / "param.json", run / "app0" / "sce_sys" / "param.sfo");
+        if (param.empty() || parseParam(param).downloadDataSizeMiB == 0) return false;
         std::filesystem::create_directories(run / "download0");
         return true;
     } catch (const std::exception&) {
@@ -59,7 +71,7 @@ const bool g_downloadDataMounted = [] {
 const bool g_dataMounted = [] {
     try {
         const auto run = std::filesystem::current_path();
-        if (!std::filesystem::exists(run / "app0" / "sce_sys" / "param.json")) return false;
+        if (findParam(run / "app0" / "sce_sys" / "param.json", run / "app0" / "sce_sys" / "param.sfo").empty()) return false;
         std::filesystem::create_directories(run / "data");
         return true;
     } catch (const std::exception&) {

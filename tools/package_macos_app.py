@@ -24,6 +24,7 @@ import argparse
 import json
 import plistlib
 import shutil
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
@@ -42,7 +43,25 @@ exec {command} "$@" >> "$HOME/Library/Logs/AnyPS5/{title_id}.log" 2>&1
 """
 
 
+def sfo_entries(path):
+    data = path.read_bytes()
+    if data[:4] != b"\0PSF":
+        raise RuntimeError(f"{path} has no PSF header")
+    key_table, data_table, count = struct.unpack_from("<III", data, 8)
+    entries = {}
+    for index in range(count):
+        key_offset, kind, length, _, data_offset = struct.unpack_from("<HHIII", data, 0x14 + index * 0x10)
+        key = data[key_table + key_offset:data.index(b"\0", key_table + key_offset)].decode()
+        value = data[data_table + data_offset:data_table + data_offset + length]
+        entries[key] = struct.unpack("<i", value)[0] if kind == 0x0404 else value.split(b"\0")[0].decode("utf-8")
+    return entries
+
+
 def title_metadata(app0):
+    if not (app0 / "sce_sys" / "param.json").is_file():
+        entries = sfo_entries(app0 / "sce_sys" / "param.sfo")
+        title_id = entries.get("TITLE_ID") or "UNKNOWN"
+        return title_id, entries.get("TITLE") or title_id, entries.get("APP_VER") or "1.0"
     parameters = json.loads((app0 / "sce_sys" / "param.json").read_text(encoding="utf-8"))
     title_id = parameters.get("titleId") or "UNKNOWN"
     localized = parameters.get("localizedParameters", {})

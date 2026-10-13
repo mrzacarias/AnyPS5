@@ -70,6 +70,7 @@ add_library(libkernel SHARED EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/Time/TimedWait.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/AppMetadata/src/AppMetadata.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/AppMetadata/src/ParamJsonParser.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/AppMetadata/src/ParamSfoParser.cpp
 )
 if(APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/System/src/UserContext.cpp PROPERTIES HEADER_FILE_ONLY ON)
