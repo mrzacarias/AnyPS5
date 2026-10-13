@@ -31,6 +31,9 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
         return DrawVerdict::Drawn;
     };
     auto drawParameters = Pm4::ResolveDraw(packet, queue);
+    // A prefetch (APS5_DRAW_PREFETCH) builds a direct draw's missing entry and stops at the insert.
+    const bool prefetching = prefetchingDraw();
+    if (prefetching && drawParameters.indirect) return DrawVerdict::Nothing;
     const bool pipelined = DrawPipeline::Active();
     if (pipelined && drawParameters.indirect) DrawPipeline::Queue0().Drain(DrawPipeline::DrainReason::Indirect);
     bool traceIndirect = false;
@@ -87,15 +90,17 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
         }
         drawKey = drawRegisterKey(queue, *submission.shaders, localDevice->Serial(), &shapeKey, relocation.get(), &drawAlias);
         std::lock_guard cacheLock(drawCacheMutex);
-        ++drawEntryCounters.lookups;
-        ++drawEntryCounters.registerKeyLookups;
-        if (profile) drawEntryCounters.keyUs += std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - keyStart).count();
+        if (!prefetching) {
+            ++drawEntryCounters.lookups;
+            ++drawEntryCounters.registerKeyLookups;
+        }
+        if (profile && !prefetching) drawEntryCounters.keyUs += std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - keyStart).count();
         const auto found = drawCache.find(drawKey);
         if (found != drawCache.end()) {
             entry = found->second;
             decode = entry->decode;
         } else {
-            ++drawEntryCounters.absent;
+            if (!prefetching) ++drawEntryCounters.absent;
             if (traceDrawCache()) {
                 auto& counters = drawEntryCounters;
                 if (traceKeysEvicted.contains(drawKey)) ++counters.absentEvicted;
@@ -129,6 +134,7 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
     }
     if (dataEntry != nullptr && !DecodeProgramsCurrent(*dataEntry->decode, *submission.shaders)) dataEntry = nullptr;
     phaseTiming.Phase(DrawRowKeyLookupValidate);
+    if (prefetching && (!registerKey || entry != nullptr)) return DrawVerdict::Nothing;
 
     if (dataEntry != nullptr) {
         auto refreshed = std::make_shared<DrawDecode>(*dataEntry->decode);
@@ -231,7 +237,7 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
     std::uint64_t dataStagesReused = 0, dataStagesCompiled = 0, dataVerified = 0;
     bool drawHit = false;
     bool verifyHit = false;
-    lookupDraw(submission, localDevice, graphics, pixel, programs, roles, vertexInfos, useDrawEntries, registerKey, profile, drawKey, entry, matched, matchedRegions, drawHit, verifyHit, phaseTiming, phaseMs, dataEntry, dataCandidates);
+    if (!prefetching) lookupDraw(submission, localDevice, graphics, pixel, programs, roles, vertexInfos, useDrawEntries, registerKey, profile, drawKey, entry, matched, matchedRegions, drawHit, verifyHit, phaseTiming, phaseMs, dataEntry, dataCandidates);
     for (auto& variant : matched) {
         if (variant != nullptr) applyShaderDataPatches(*variant);
     }
@@ -350,6 +356,7 @@ DrawVerdict Driver::draw(QueueState& queue, std::span<const std::uint32_t> packe
     }
     cacheDrawStages(useDrawEntries, drawHit, drawParameters, indirectCpu, programs, stageCaptures, vertexInfos, decodeReads, verifyHit, matched, fresh, drawKey, registerKey, decode, phaseTiming, reused, entry, shapeKey);
     timing.Mark("shader_compile_and_link");
+    if (prefetching) return DrawVerdict::Drawn;
 
     for (const auto& reads : decodeReads) {
         for (const auto& read : reads) memory.push_back({read.address, std::as_bytes(std::span(read.bytes))});

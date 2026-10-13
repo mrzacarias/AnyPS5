@@ -168,7 +168,12 @@ void Driver::execute(const Submission& submission) {
     struct ClearAhead {
         ~ClearAhead() { clearResolvedAhead(); }
     } clearAhead;
+    if (pipelined) prefetchDraws(submission, queue);
+    struct EndPrefetch {
+        ~EndPrefetch() { endPrefetch(); }
+    } endPrefetchGuard;
     for (std::size_t cursor = 0; cursor < submission.commands.size();) {
+        notePrefetchProgress(cursor);
         if (packetEpoch()) bumpEpoch(&EpochBumps::packets);
         CheckFailure();
         const auto header = submission.commands[cursor];
