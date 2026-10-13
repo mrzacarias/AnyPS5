@@ -5,6 +5,9 @@
 #define VK_NO_PROTOTYPES
 #endif
 #include <vulkan/vulkan.h>
+#include <array>
+#include <cstring>
+#include <type_traits>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -91,6 +94,28 @@ inline std::uint64_t& DeviceProcLookups() {
 }
 
 inline constexpr std::size_t EmptyBufferBytes = 16;
+
+#if defined(__APPLE__) && defined(__aarch64__)
+// MoltenVK walks every live resource for a global barrier into host reads, though a unified-memory GPU
+// syncs nothing there (MVKBuffer and MVKImage needsHostReadSync); the host read is dropped from global
+// barriers so the walk, under the device's resource lock, is skipped.
+inline PFN_vkCmdPipelineBarrier& NextPipelineBarrier() {
+    static PFN_vkCmdPipelineBarrier next = nullptr;
+    return next;
+}
+
+inline void VKAPI_CALL PipelineBarrierWithoutHostReads(VkCommandBuffer commands, VkPipelineStageFlags source, VkPipelineStageFlags destination, VkDependencyFlags flags, std::uint32_t memoryCount, const VkMemoryBarrier* memory, std::uint32_t bufferCount, const VkBufferMemoryBarrier* buffers, std::uint32_t imageCount, const VkImageMemoryBarrier* images) {
+    std::array<VkMemoryBarrier, 4> local;
+    if (memoryCount <= local.size()) {
+        for (std::uint32_t index = 0; index < memoryCount; ++index) {
+            local[index] = memory[index];
+            local[index].dstAccessMask &= ~VK_ACCESS_HOST_READ_BIT;
+        }
+        memory = local.data();
+    }
+    NextPipelineBarrier()(commands, source, destination, flags, memoryCount, memory, bufferCount, buffers, imageCount, images);
+}
+#endif
 
 struct Context {
     VkDevice device;
@@ -179,6 +204,14 @@ struct Context {
         ++DeviceProcLookups();
         const auto function = reinterpret_cast<TFunction>(deviceProc(device, name));
         if (function == nullptr) throw std::runtime_error(std::string("AGC graphics: missing Vulkan function: ") + name);
+#if defined(__APPLE__) && defined(__aarch64__)
+        if constexpr (std::is_same_v<TFunction, PFN_vkCmdPipelineBarrier>) {
+            if (std::strcmp(name, "vkCmdPipelineBarrier") == 0) {
+                NextPipelineBarrier() = function;
+                return &PipelineBarrierWithoutHostReads;
+            }
+        }
+#endif
         return function;
     }
 
