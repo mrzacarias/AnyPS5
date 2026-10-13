@@ -262,7 +262,8 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
         if (states[index] == 1) throw Domain::RelinkerException("Cyclic guest initialization dependency: " + Io::Utf8Path(images[index].SourcePath));
         if (states[index] == 2) return;
         states[index] = 1;
-        for (const auto dependency : dependencies[index]) visit(dependency);
+        if (images[index].SourcePath.filename() != "libc.prx")
+            for (const auto dependency : dependencies[index]) visit(dependency);
         states[index] = 2;
         order.push_back(index);
     };
