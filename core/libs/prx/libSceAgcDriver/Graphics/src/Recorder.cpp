@@ -14,6 +14,7 @@
 #include "prx/libc/include/CpuTopology.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
 #include <algorithm>
+#include <dlfcn.h>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -28,6 +29,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 #include <tuple>
 #include "prx/libc/include/general/AtomicSharedPtr.hpp"
 
@@ -38,9 +40,48 @@ namespace {
 Recorder* activeRecorder = nullptr;
 thread_local bool hookOrdersGpuWrites = false;
 
+// Diagnostic (APS5_PROFILE_DRAW): why draws begin new render passes and which callers of
+// Commands() end an open one, printed every 10 s.
+struct PassBreaks {
+    std::mutex mutex;
+    std::uint64_t reasons[4] = {};
+    std::map<std::uintptr_t, std::uint64_t> enders;
+    std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
+};
+
+PassBreaks& Breaks() {
+    static PassBreaks breaks;
+    return breaks;
+}
+
+void NotePassBreak(int reason, const void* ender);
+
 bool DrawProfiled() {
     static const bool profiled = std::getenv("APS5_PROFILE_DRAW") != nullptr;
     return profiled;
+}
+
+void NotePassBreak(int reason, const void* ender) {
+    if (!DrawProfiled()) return;
+    auto& breaks = Breaks();
+    std::lock_guard lock(breaks.mutex);
+    if (reason >= 0) ++breaks.reasons[reason];
+    if (ender != nullptr) {
+        Dl_info info{};
+        const auto base = dladdr(ender, &info) != 0 ? reinterpret_cast<std::uintptr_t>(info.dli_fbase) : 0u;
+        ++breaks.enders[reinterpret_cast<std::uintptr_t>(ender) - base];
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (now - breaks.last < std::chrono::seconds(10)) return;
+    breaks.last = now;
+    std::vector<std::pair<std::uint64_t, std::uintptr_t>> top;
+    for (const auto& [offset, count] : breaks.enders) top.emplace_back(count, offset);
+    std::sort(top.rbegin(), top.rend());
+    std::string text;
+    for (std::size_t n = 0; n < top.size() && n < 8; ++n) text += " +0x" + [&] { char b[32]; std::snprintf(b, sizeof(b), "%lx=%llu", static_cast<unsigned long>(top[n].second), static_cast<unsigned long long>(top[n].first)); return std::string(b); }();
+    AgcDriver::ProfilePrint_nid_no_patch("[passbreak] (10 s) new passes: not open %llu, forced %llu, key changed %llu, hazard %llu; passes ended by Commands() callers:%s\n", static_cast<unsigned long long>(breaks.reasons[0]), static_cast<unsigned long long>(breaks.reasons[1]), static_cast<unsigned long long>(breaks.reasons[2]), static_cast<unsigned long long>(breaks.reasons[3]), text.c_str());
+    for (auto& r : breaks.reasons) r = 0;
+    breaks.enders.clear();
 }
 
 std::uint64_t syncCounts[5] = {};
@@ -1364,7 +1405,10 @@ VkCommandBuffer Recorder::Commands(VkAccessFlags* coveredAccess) {
     // Work recorded after a draw's render pass or an inline store run must see their writes: the
     // pass's end and the run's trailing barrier go in first (a per-batch run waits for Submit, or
     // for a caller whose ranges overlap a queued store: FlushStores).
-    if (open->renderPass.open) endOpenRenderPass();
+    if (open->renderPass.open) {
+        NotePassBreak(-1, __builtin_return_address(0));
+        endOpenRenderPass();
+    }
     if (open->run.open && !LabelRunsPerBatch()) closeStoreRun();
     if (coveredAccess != nullptr) *coveredAccess = open->coveredAccess;
     open->coveredAccess = 0;
@@ -1379,6 +1423,7 @@ Recorder::DrawPassStart Recorder::StartDrawPass(std::uint64_t key, bool forced, 
     ensureOpen();
     auto& pass = open->renderPass;
     if (!pass.open || forced || (countingSamples && segmentMode() && !segmentSlotReady(*open))) {
+        NotePassBreak(!pass.open ? 0 : 1, nullptr);
         const auto commands = Commands();
         open->passHazards.Clear();
         open->passHazards.BeginPass();
@@ -1388,6 +1433,7 @@ Recorder::DrawPassStart Recorder::StartDrawPass(std::uint64_t key, bool forced, 
     if (hazard == PassHazard::None && pass.key == key) return {open->commands, true, false};
     const bool merge = MergeBarriers() && !fenced && !pass.fenced && !pass.afterPass;
     const bool elide = merge && hazard == PassHazard::None;
+    NotePassBreak(hazard == PassHazard::None ? 2 : 3, nullptr);
     endOpenRenderPass(!merge);
     const auto commands = Commands();
     if (!elide) open->passHazards.Clear();
