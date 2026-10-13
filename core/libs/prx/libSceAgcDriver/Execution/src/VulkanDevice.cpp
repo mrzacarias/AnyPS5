@@ -937,11 +937,13 @@ VulkanDevice::VulkanDevice(const PresentationWindow* window, bool compileOnly) :
     create.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     const std::int32_t argumentBuffers = 0;
     const VkBool32 retainedReferences = VK_TRUE;
+    const VkBool32 synchronousSubmits = std::getenv("MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS") != nullptr && std::strcmp(std::getenv("MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS"), "0") != 0 ? VK_TRUE : VK_FALSE;
     const VkLayerSettingEXT setting[] = {
         {"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &argumentBuffers},
         {"MoltenVK", "MVK_CONFIG_LIVE_CHECK_ALL_RESOURCES", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &retainedReferences},
+        {"MoltenVK", "MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &synchronousSubmits},
     };
-    const VkLayerSettingsCreateInfoEXT settings{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 2, setting};
+    const VkLayerSettingsCreateInfoEXT settings{VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, nullptr, 3, setting};
     {
         std::uint32_t availableCount = 0;
         const auto enumerateExtensions = state->InstanceFunction<PFN_vkEnumerateInstanceExtensionProperties>("vkEnumerateInstanceExtensionProperties");
