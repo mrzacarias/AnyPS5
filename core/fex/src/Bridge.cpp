@@ -145,8 +145,26 @@ void DeliverInterrupts() {
     }
 }
 
+// Holds of a host library's lock that its own signal handlers take (the write watch's turns): the
+// guest code an interrupt runs may stop the thread inside them, so interrupts wait for the hold to end.
+thread_local int interruptHolds = 0;
+thread_local bool interruptHeld = false;
+
 void OnInterrupt(int) {
-    if (inNativeCall.load()) DeliverInterrupts();
+    if (!inNativeCall.load()) return;
+    if (interruptHolds != 0) {
+        interruptHeld = true;
+        return;
+    }
+    DeliverInterrupts();
+}
+
+void DeferInterrupts(bool defer) {
+    if (defer) {
+        ++interruptHolds;
+        return;
+    }
+    if (--interruptHolds == 0 && std::exchange(interruptHeld, false) && inNativeCall.load()) DeliverInterrupts();
 }
 
 bool RaiseOnThread(pthread_t target, Delivery deliver, void* data) {
@@ -378,6 +396,7 @@ void Bridge::Connect() {
         sigaction(InterruptSignal, &action, nullptr);
         reinterpret_cast<void (*)(bool (*)(pthread_t, Delivery, void*))>(setInterrupt)(RaiseOnThread);
     }
+    if (void* setDeferral = HostSymbol("Aps5SetInterruptDeferral_nid_no_patch")) reinterpret_cast<void (*)(void (*)(bool))>(setDeferral)(DeferInterrupts);
 }
 
 void Bridge::Register(const GuestImage& image, const std::string& name) {

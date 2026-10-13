@@ -318,6 +318,8 @@ private:
 
 const bool g_opened = (Watch::Get(), true);
 #elif defined(__APPLE__)
+std::atomic<void (*)(bool)> g_deferInterrupts{nullptr};
+
 class Watch {
 public:
     static Watch& Get() {
@@ -470,14 +472,21 @@ private:
         std::atomic<std::uint64_t> serving{0};
     };
 
+    // aps5-fex runs guest interrupts (a thread suspension among them) from a signal handler, so a thread
+    // interrupted while it holds or waits for a turn would stop every later turn, the fault handler's
+    // included; the bridge holds them back until the turn is over.
     struct Lock {
-        explicit Lock(Turns& turns) : _turns(turns), _turn(turns.next.fetch_add(1, std::memory_order_relaxed)) {
+        explicit Lock(Turns& turns) : _turns(turns), _defer(g_deferInterrupts.load(std::memory_order_acquire)) {
+            if (_defer != nullptr) _defer(true);
+            _turn = turns.next.fetch_add(1, std::memory_order_relaxed);
             while (_turns.serving.load(std::memory_order_acquire) != _turn) ::sched_yield();
         }
         ~Lock() {
             _turns.serving.store(_turn + 1, std::memory_order_release);
+            if (_defer != nullptr) _defer(false);
         }
         Turns& _turns;
+        void (*_defer)(bool);
         std::uint64_t _turn;
     };
 
@@ -742,3 +751,11 @@ bool GuestWriteWatchCollectArmed_nid_postfix(std::uintptr_t address, std::size_t
 }
 
 }
+
+#if defined(__APPLE__)
+// aps5-fex's guest interrupt deferral: `defer(true)` holds this thread's guest interrupts back,
+// `defer(false)` ends the hold and delivers what arrived meanwhile.
+extern "C" void Aps5SetInterruptDeferral_nid_no_patch(void (*defer)(bool)) {
+    GuestWriteWatch::g_deferInterrupts.store(defer, std::memory_order_release);
+}
+#endif
