@@ -30,7 +30,6 @@
 #include <cstring>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
-#include <sched.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -480,10 +479,22 @@ private:
         explicit Lock(Turns& turns) : _turns(turns), _defer(g_deferInterrupts.load(std::memory_order_acquire)) {
             if (_defer != nullptr) _defer(true);
             _turn = turns.next.fetch_add(1, std::memory_order_relaxed);
-            while (_turns.serving.load(std::memory_order_acquire) != _turn) ::sched_yield();
+            // Turns are short (a lookup, an mprotect): spin a little, then sleep until `serving`
+            // moves. A sched_yield loop (swtch_pri) depresses every waiter's priority, so the next
+            // turn's owner can wait behind other runnable threads while the turn stays unserved.
+            for (int spin = 0; spin < 256; ++spin) {
+                if (_turns.serving.load(std::memory_order_acquire) == _turn) return;
+#if defined(__aarch64__)
+                __builtin_arm_isb(15);
+#else
+                __builtin_ia32_pause();
+#endif
+            }
+            for (auto serving = _turns.serving.load(std::memory_order_acquire); serving != _turn; serving = _turns.serving.load(std::memory_order_acquire)) _turns.serving.wait(serving, std::memory_order_acquire);
         }
         ~Lock() {
             _turns.serving.store(_turn + 1, std::memory_order_release);
+            _turns.serving.notify_all();
             if (_defer != nullptr) _defer(false);
         }
         Turns& _turns;
