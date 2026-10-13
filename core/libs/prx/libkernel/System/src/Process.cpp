@@ -392,6 +392,14 @@ int APS5_VABI sceKernelGetCpumode(void) {
     return 0;
 }
 
+int APS5_VABI sceKernelIsNeoMode(void) {
+    return 0;
+}
+
+int APS5_VABI sceKernelIsProspero(void) {
+    return 0;
+}
+
 std::uint64_t APS5_VABI sceKernelGetGPI(void) {
     return gpoBits.load(std::memory_order_relaxed);
 }
