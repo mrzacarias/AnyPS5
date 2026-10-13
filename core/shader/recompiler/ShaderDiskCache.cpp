@@ -204,6 +204,18 @@ public:
         for (std::size_t i = 0; i < count; ++i) flags[i] = Get<bool>();
     }
 
+    void Flags(SharedVector<bool>& flags) {
+        std::vector<bool> read;
+        Flags(read);
+        flags = std::move(read);
+    }
+
+    void Values(SharedVector<std::uint32_t>& values) {
+        std::vector<std::uint32_t> read;
+        Values(read);
+        values = std::move(read);
+    }
+
     void Text(std::string& text) {
         const auto count = Count(1);
         text.assign(reinterpret_cast<const char*>(bytes.data() + position), count);

@@ -474,7 +474,7 @@ DescriptorBindingPlan DescriptorBindingBuilder::Prepare(const IrBindingLayout& l
         for (std::size_t element = 0; element < binding.resources.size(); ++element) {
             const auto resource = binding.resources[element];
             for (const auto& pair : info.sampledPairs) {
-                if (pair.image == resource || pair.image == info.images.at(resource).indirectRoot) binding.descriptor.imageSamplers[element] |= samplerMasks.at(pair.sampler);
+                if (pair.image == resource || pair.image == info.images.at(resource).indirectRoot) binding.descriptor.imageSamplers.Set(element, binding.descriptor.imageSamplers[element] | samplerMasks.at(pair.sampler));
             }
         }
     }
@@ -494,7 +494,7 @@ DescriptorBindingPlan DescriptorBindingBuilder::Select(const DescriptorBindingPl
     const bool hasSamplers = std::any_of(selected.bindings.begin(), selected.bindings.end(), [](const auto& binding) { return binding.descriptor.role == DescriptorRole::GuestSamplers; });
     if (!hasSamplers) {
         for (auto& binding : selected.bindings) {
-            std::fill(binding.descriptor.imageSamplers.begin(), binding.descriptor.imageSamplers.end(), 0u);
+            binding.descriptor.imageSamplers.assign(binding.descriptor.imageSamplers.size(), 0u);
         }
     }
     selected.imageMetadata = plan.imageMetadata;
