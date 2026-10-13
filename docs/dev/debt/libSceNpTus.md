@@ -1,0 +1,45 @@
+# libSceNpTus technical debt
+
+### Unknown function info
+
+- [sceNpTusGetDataForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTssGetData](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusTryAndSetVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusSetMultiSlotVariableVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetDataForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusCreateNpTitleCtxA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusAbortRequest](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusCreateRequest](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusAddAndGetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiSlotVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetFriendsVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusDeleteRequest](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusAddAndGetVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiSlotVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusDeleteNpTitleCtx](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusTryAndSetVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusAddAndGetVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetFriendsDataStatusForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusSetDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserDataStatusForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusSetMultiSlotVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserDataStatusAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusTryAndSetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusDeleteMultiSlotDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetDataAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusSetDataAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTssCreateNpTitleCtxA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserDataStatusA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiSlotVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetFriendsVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusTryAndSetVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserDataStatusForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusAddAndGetVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiSlotVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusDeleteMultiSlotDataVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetFriendsDataStatusA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
