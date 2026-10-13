@@ -6,6 +6,7 @@
 extern "C" {
 
 const void* ApplicationProcessParameters_nid_no_patch();
+bool ApplicationIsPs4_nid_no_patch();
 void ApplicationHeapInitialize_nid_no_patch(const void* processParameters);
 void ApplicationHeapRegister_nid_no_patch(void* const* api);
 void* ApplicationHeapAllocate_nid_no_patch(std::size_t bytes);

@@ -1945,6 +1945,20 @@ struct VideoOutFlipStatus {
     std::uint64_t reserved3[7] = {};
 };
 
+struct VideoOutFlipStatusPs4 {
+    std::uint64_t count = 0;
+    std::uint64_t processTime = 0;
+    std::uint64_t tsc = 0;
+    std::int64_t flipArg = 0;
+    std::uint64_t submitTsc = 0;
+    std::uint64_t reserved0 = 0;
+    std::int32_t gcQueueNum = 0;
+    std::int32_t flipPendingNum = 0;
+    std::int32_t currentBuffer = 0;
+    std::uint32_t reserved1 = 0;
+};
+static_assert(sizeof(VideoOutFlipStatusPs4) == 0x40);
+
 struct VideoOutVblankStatus {
     std::uint64_t count = 0;
     std::uint64_t processTime = 0;

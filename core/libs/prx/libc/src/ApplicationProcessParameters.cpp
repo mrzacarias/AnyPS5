@@ -72,3 +72,12 @@ const void* ApplicationProcessParameters_nid_no_patch() {
     throw std::runtime_error("application heap: unsupported executable format");
 #endif
 }
+
+bool ApplicationIsPs4_nid_no_patch() {
+    static const bool ps4 = [] {
+        std::uint32_t sdkVersionHigh = 0;
+        std::memcpy(&sdkVersionHigh, static_cast<const std::byte*>(ApplicationProcessParameters_nid_no_patch()) + 0x14, sizeof(sdkVersionHigh));
+        return sdkVersionHigh == 0;
+    }();
+    return ps4;
+}

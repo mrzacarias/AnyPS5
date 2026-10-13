@@ -12,6 +12,7 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libSceVideoOut/include/VideoOutDriver.hpp"
 #include "prx/libkernel/AppMetadata/include/AppMetadata.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 
 static constexpr std::uint32_t VIDEO_OUT_OUTPUT_OPTIONS_FIRST_WORD = 0x00FF0000;
 static constexpr std::size_t VIDEO_OUT_OUTPUT_OPTIONS_FREE_WORD = 3;
@@ -129,6 +130,12 @@ int APS5_VABI sceVideoOutGetFlipStatus(int handle, VideoOutFlipStatus* status) t
     }
     std::unique_lock lock(cfg->mutex);
     cfg->Check();
+    if (ApplicationIsPs4_nid_no_patch()) {
+        const auto& flip = cfg->flipStatus;
+        VideoOutFlipStatusPs4 ps4{flip.count, flip.processTime, flip.processTimeCounter, flip.flipArg, flip.submitProcessTimeCounter, 0, flip.gcQueueNum, flip.flipPendingNum, flip.currentBuffer, 0};
+        std::memcpy(status, &ps4, sizeof(ps4));
+        return 0;
+    }
     *status = cfg->flipStatus;
     return 0;
 } catch (const ProcessShutdown&) {
