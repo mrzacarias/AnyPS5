@@ -263,6 +263,7 @@ bool Driver::fillBuffer(QueueState& queue, std::uint32_t queueId, std::span<cons
                 case 0x80: filled = Graphics::DccKeys::Clear1110; break;
                 case 0xc0: filled = Graphics::DccKeys::Clear1111; break;
                 case 0x20: filled = Graphics::DccKeys::ClearRegister; break;
+                case 0x10: filled = Graphics::DccKeys::ClearSingle; break;
                 case 0xff: filled = Graphics::DccKeys::Uncompressed; break;
                 default: break;
             }
