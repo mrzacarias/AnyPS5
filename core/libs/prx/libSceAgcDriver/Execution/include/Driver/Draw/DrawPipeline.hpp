@@ -56,7 +56,7 @@ private:
     std::atomic<std::size_t> outstanding{0};
     std::uint32_t idleWaiters = 0;
     bool committerWaiting = false;
-    std::thread thread;
+    bool started = false;
     std::uint64_t commits = 0;
     std::uint64_t commitNs = 0;
     std::uint64_t commitErrors = 0;

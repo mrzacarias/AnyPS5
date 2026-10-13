@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <algorithm>
@@ -74,7 +75,20 @@ void DrawPipeline::Enqueue(Commit commit, std::vector<Range> writes, std::uint64
     ++enqueued;
     items.push_back({std::move(commit), std::move(writes), labelAddress, std::move(labelBytes)});
     outstanding.fetch_add(1, std::memory_order_release);
-    if (!thread.joinable()) thread = std::thread([this] { run(); });
+    if (!started) {
+        pthread_attr_t attributes;
+        pthread_attr_init(&attributes);
+        pthread_attr_setstacksize(&attributes, 64u << 20u);
+        pthread_t committer;
+        const int created = pthread_create(&committer, &attributes, [](void* pipeline) -> void* {
+            static_cast<DrawPipeline*>(pipeline)->run();
+            return nullptr;
+        }, this);
+        pthread_attr_destroy(&attributes);
+        if (created != 0) throw std::runtime_error("draw pipeline: cannot start the committer thread");
+        pthread_detach(committer);
+        started = true;
+    }
     if (committerWaiting) wake.notify_one();
     if (!profile) return;
     const auto now = std::chrono::steady_clock::now();
