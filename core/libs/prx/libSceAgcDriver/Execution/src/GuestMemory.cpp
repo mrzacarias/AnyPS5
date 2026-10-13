@@ -556,26 +556,45 @@ bool describePages(std::uintptr_t address, std::size_t bytes, Emit&& emit) {
         if (!emit(PageRun{cursor, next, readable, writable})) return true;
         cursor = next;
 #elif defined(__APPLE__)
-        auto regionBase = static_cast<mach_vm_address_t>(cursor);
-        mach_vm_size_t regionSize = 0;
-        vm_region_basic_info_data_64_t info{};
-        mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
-        mach_port_t object = MACH_PORT_NULL;
-        const auto result = mach_vm_region(mach_task_self(), &regionBase, &regionSize, VM_REGION_BASIC_INFO_64, reinterpret_cast<vm_region_info_t>(&info), &count, &object);
-        if (result == KERN_INVALID_ADDRESS) {
-            static_cast<void>(emit(PageRun{cursor, end, false, false}));
-            return true;
+        // There is no guest arena to keep page states for, so the last regions queried are kept per
+        // thread until the next guest mapping change, as the page states are elsewhere.
+        struct Region {
+            std::uintptr_t begin = 0;
+            std::uintptr_t end = 0;
+            std::uint64_t generation = 0;
+            vm_prot_t protection = 0;
+        };
+        thread_local std::array<Region, 32> regions{};
+        thread_local std::size_t nextRegion = 0;
+        const auto generation = GuestAllocations::GuestAllocationsGeneration_nid_postfix();
+        const auto found = std::find_if(regions.begin(), regions.end(), [&](const Region& region) { return region.generation == generation && cursor >= region.begin && cursor < region.end; });
+        Region region;
+        if (found != regions.end()) {
+            region = *found;
+        } else {
+            auto regionBase = static_cast<mach_vm_address_t>(cursor);
+            mach_vm_size_t regionSize = 0;
+            vm_region_basic_info_data_64_t info{};
+            mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+            mach_port_t object = MACH_PORT_NULL;
+            const auto result = mach_vm_region(mach_task_self(), &regionBase, &regionSize, VM_REGION_BASIC_INFO_64, reinterpret_cast<vm_region_info_t>(&info), &count, &object);
+            if (result == KERN_INVALID_ADDRESS) {
+                static_cast<void>(emit(PageRun{cursor, end, false, false}));
+                return true;
+            }
+            if (result != KERN_SUCCESS || regionSize == 0) return false;
+            if (regionBase > cursor) {
+                const auto gapEnd = std::min<std::uintptr_t>(end, regionBase);
+                if (!emit(PageRun{cursor, gapEnd, false, false})) return true;
+                cursor = gapEnd;
+                continue;
+            }
+            region = Region{static_cast<std::uintptr_t>(regionBase), static_cast<std::uintptr_t>(regionBase + regionSize), generation, info.protection};
+            regions[nextRegion++ % regions.size()] = region;
         }
-        if (result != KERN_SUCCESS || regionSize == 0) return false;
-        if (regionBase > cursor) {
-            const auto gapEnd = std::min<std::uintptr_t>(end, regionBase);
-            if (!emit(PageRun{cursor, gapEnd, false, false})) return true;
-            cursor = gapEnd;
-            continue;
-        }
-        const auto next = std::min<std::uintptr_t>(end, regionBase + regionSize);
-        const bool readable = (info.protection & VM_PROT_READ) != 0;
-        if (!readable || (info.protection & VM_PROT_WRITE) != 0) {
+        const auto next = std::min<std::uintptr_t>(end, region.end);
+        const bool readable = (region.protection & VM_PROT_READ) != 0;
+        if (!readable || (region.protection & VM_PROT_WRITE) != 0) {
             if (!emit(PageRun{cursor, next, readable, readable})) return true;
             cursor = next;
             continue;
