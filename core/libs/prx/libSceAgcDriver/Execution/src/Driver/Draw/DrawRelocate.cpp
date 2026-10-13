@@ -2,6 +2,7 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Diagnostics.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libSceAgcDriver/Execution/include/ProfileOutput.hpp"
+#include "prx/libc/include/GuestArena.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -39,10 +40,14 @@ std::uint64_t Driver::relocatedContentKey(const RelocatableUserWord& word, std::
         return hash;
     }
     std::array<std::uint32_t, MaxContentWords> content;
+    std::uintptr_t arenaBase = 0;
+    std::size_t arenaBytes = 0;
+    GuestArena::GuestArenaRange_nid_postfix(&arenaBase, &arenaBytes);
     for (const auto& [offset, words] : word.reads) {
         const auto count = std::min<std::size_t>(words, MaxContentWords);
         const auto address = AlignedWord(value) + static_cast<std::uint64_t>(offset);
-        if (GuestMemory::CopyMapped(address, std::as_writable_bytes(std::span(content).first(count))) != GuestMemory::Compare::Equal) {
+        const auto bytes = count * sizeof(std::uint32_t);
+        if (address < arenaBase || address - arenaBase > arenaBytes || arenaBytes - (address - arenaBase) < bytes || GuestMemory::CopyMapped(address, std::as_writable_bytes(std::span(content).first(count))) != GuestMemory::Compare::Equal) {
             readable = false;
             return hash;
         }
