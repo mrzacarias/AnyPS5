@@ -13,6 +13,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
+#if defined(__APPLE__)
+#include <sys/stat.h>
+#endif
 
 extern "C" int* APS5_VABI __error_nid_postfix();
 extern "C" int APS5_VABI sceKernelMlock_nid_postfix(void* address, std::uint64_t length);
@@ -133,7 +136,13 @@ void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protecti
     if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor) && !RegularFile(mappingDescriptor)) return failed(GuestNotSupported);
 #else
     const int mappingDescriptor = descriptor;
-    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor)) return failed(GuestNotSupported);
+#if defined(__APPLE__)
+    struct stat status {};
+    const bool regularFile = ::fstat(mappingDescriptor, &status) == 0 && S_ISREG(status.st_mode);
+#else
+    const bool regularFile = false;
+#endif
+    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor) && !regularFile) return failed(GuestNotSupported);
 #endif
     const std::size_t alignment = (flags & GuestAlignedSuper) != 0 ? SuperpageSize : PS5_PAGE_SIZE;
     void* mapped = nullptr;
