@@ -5,9 +5,17 @@
 
 extern "C" {
 
-int APS5_VABI sceNpTusGetDataForCrossSaveVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetDataForCrossSaveVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, void* dataStatus, std::uint64_t dataStatusSize, void* data, std::uint64_t recvSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(dataStatus);
+    static_cast<void>(dataStatusSize);
+    static_cast<void>(data);
+    static_cast<void>(recvSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("-LxFGYCJwww");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTssGetData(void) {
@@ -15,19 +23,44 @@ int APS5_VABI sceNpTssGetData(void) {
     return 0;
 }
 
-int APS5_VABI sceNpTusTryAndSetVariableA(void) {
+std::int32_t APS5_VABI sceNpTusTryAndSetVariableA(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, std::int32_t opeType, std::int64_t variable, const std::int64_t* compareValue, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* resultVariable, std::uint64_t resultVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(opeType);
+    static_cast<void>(variable);
+    static_cast<void>(compareValue);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(resultVariable);
+    static_cast<void>(resultVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("0up4MP1wNtc");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusSetMultiSlotVariableVUser(void) {
+std::int32_t APS5_VABI sceNpTusSetMultiSlotVariableVUser(int reqId, const void* targetVirtualUserId, std::int32_t* slotIds, std::int64_t* variables, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotIds);
+    static_cast<void>(variables);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("1Cz0hTJFyh4");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetDataForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusGetDataForCrossSave(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, void* dataStatus, std::uint64_t dataStatusSize, void* data, std::uint64_t recvSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(dataStatus);
+    static_cast<void>(dataStatusSize);
+    static_cast<void>(data);
+    static_cast<void>(recvSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("1TE3OvH61qo");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTusCreateNpTitleCtxA(void) {
@@ -45,19 +78,43 @@ int APS5_VABI sceNpTusCreateRequest(void) {
     return 0;
 }
 
-int APS5_VABI sceNpTusAddAndGetVariableForCrossSaveVUser(void) {
+std::int32_t APS5_VABI sceNpTusAddAndGetVariableForCrossSaveVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, std::int64_t inVariable, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* outVariable, std::uint64_t outVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(inVariable);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(outVariable);
+    static_cast<void>(outVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("4VLlu7EIjzk");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiSlotVariableAVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiSlotVariableAVUser(int reqId, const void* targetVirtualUserId, std::int32_t* slotIds, void* variables, std::uint64_t variablesSize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotIds);
+    static_cast<void>(variables);
+    static_cast<void>(variablesSize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("AsziNQ9X2uk");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetFriendsVariableA(void) {
+std::int32_t APS5_VABI sceNpTusGetFriendsVariableA(int reqId, std::int32_t slotId, std::int32_t includeSelf, std::int32_t sortType, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(slotId);
+    static_cast<void>(includeSelf);
+    static_cast<void>(sortType);
+    static_cast<void>(variableArray);
+    static_cast<void>(variableArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("C8TY-UnQoXg");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTusDeleteRequest(void) {
@@ -65,24 +122,54 @@ int APS5_VABI sceNpTusDeleteRequest(void) {
     return 0;
 }
 
-int APS5_VABI sceNpTusGetMultiUserVariableForCrossSaveVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserVariableForCrossSaveVUser(int reqId, const void* targetVirtualUserIdArray, std::int32_t slotId, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(variableArray);
+    static_cast<void>(variableArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("Djuj2+1VNL0");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusAddAndGetVariableForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusAddAndGetVariableForCrossSave(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, std::int64_t inVariable, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* outVariable, std::uint64_t outVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(inVariable);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(outVariable);
+    static_cast<void>(outVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("EPeq43CQKxY");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiSlotVariableA(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiSlotVariableA(int reqId, std::uint64_t targetAccountId, std::int32_t* slotIds, void* variableArray, std::uint64_t variablesSize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotIds);
+    static_cast<void>(variableArray);
+    static_cast<void>(variablesSize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("GDXlRTxgd+M");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiUserVariableA(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserVariableA(int reqId, const std::uint64_t* targetAccountIdArray, std::int32_t slotId, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(variableArray);
+    static_cast<void>(variableArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("Gjixv5hqRVY");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTusDeleteNpTitleCtx(void) {
@@ -90,69 +177,177 @@ int APS5_VABI sceNpTusDeleteNpTitleCtx(void) {
     return 0;
 }
 
-int APS5_VABI sceNpTusTryAndSetVariableForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusTryAndSetVariableForCrossSave(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, std::int32_t opeType, std::int64_t variable, const std::int64_t* compareValue, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* resultVariable, std::uint64_t resultVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(opeType);
+    static_cast<void>(variable);
+    static_cast<void>(compareValue);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(resultVariable);
+    static_cast<void>(resultVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("MGvSJEHwyL8");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusAddAndGetVariableAVUser(void) {
+std::int32_t APS5_VABI sceNpTusAddAndGetVariableAVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, std::int64_t inVariable, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* outVariable, std::uint64_t outVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(inVariable);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(outVariable);
+    static_cast<void>(outVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("Nt1runsPVJc");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiUserVariableForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserVariableForCrossSave(int reqId, const std::uint64_t* targetAccountIdArray, std::int32_t slotId, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(variableArray);
+    static_cast<void>(variableArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("Q5uQeScvTPE");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetFriendsDataStatusForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusGetFriendsDataStatusForCrossSave(int reqId, std::int32_t slotId, std::int32_t includeSelf, std::int32_t sortType, void* statusArray, std::uint64_t statusArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(slotId);
+    static_cast<void>(includeSelf);
+    static_cast<void>(sortType);
+    static_cast<void>(statusArray);
+    static_cast<void>(statusArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("TDoqRD+CE+M");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusSetDataA(void) {
+std::int32_t APS5_VABI sceNpTusSetDataA(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, std::uint64_t totalSize, std::uint64_t sendSize, const void* data, const void* info, std::uint64_t infoStructSize, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(totalSize);
+    static_cast<void>(sendSize);
+    static_cast<void>(data);
+    static_cast<void>(info);
+    static_cast<void>(infoStructSize);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("VzxN3tOouj8");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiUserDataStatusForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserDataStatusForCrossSave(int reqId, const std::uint64_t* targetAccountIdArray, std::int32_t slotId, void* statusArray, std::uint64_t statusArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(statusArray);
+    static_cast<void>(statusArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("cVeBif6zdZ4");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusSetMultiSlotVariableA(void) {
+std::int32_t APS5_VABI sceNpTusSetMultiSlotVariableA(int reqId, std::uint64_t targetAccountId, std::int32_t* slotIds, const std::int64_t* variables, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotIds);
+    static_cast<void>(variables);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("cf-WMA0jYCc");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiUserDataStatusAVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserDataStatusAVUser(int reqId, const void* targetVirtualUserIdArray, std::int32_t slotId, void* statusArray, std::uint64_t statusArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(statusArray);
+    static_cast<void>(statusArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("fJU2TZId210");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiUserVariableAVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserVariableAVUser(int reqId, const void* targetVirtualUserIdArray, std::int32_t slotId, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(variableArray);
+    static_cast<void>(variableArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("fVvocpq4mG4");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusTryAndSetVariableForCrossSaveVUser(void) {
+std::int32_t APS5_VABI sceNpTusTryAndSetVariableForCrossSaveVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, std::int32_t opeType, std::int64_t variable, const std::int64_t* compareValue, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* resultVariable, std::uint64_t resultVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(opeType);
+    static_cast<void>(variable);
+    static_cast<void>(compareValue);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(resultVariable);
+    static_cast<void>(resultVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("fcCwKpi4CbU");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusDeleteMultiSlotDataA(void) {
+std::int32_t APS5_VABI sceNpTusDeleteMultiSlotDataA(int reqId, std::uint64_t targetAccountId, std::int32_t* slotIds, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotIds);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("iXzUOM9sXU0");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetDataAVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetDataAVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, void* dataStatus, std::uint64_t dataStatusSize, void* data, std::uint64_t recvSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(dataStatus);
+    static_cast<void>(dataStatusSize);
+    static_cast<void>(data);
+    static_cast<void>(recvSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("iaH+Sxlw32k");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusSetDataAVUser(void) {
+std::int32_t APS5_VABI sceNpTusSetDataAVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, std::uint64_t totalSize, std::uint64_t sendSize, const void* data, const void* info, std::uint64_t infoStructSize, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(totalSize);
+    static_cast<void>(sendSize);
+    static_cast<void>(data);
+    static_cast<void>(info);
+    static_cast<void>(infoStructSize);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("kbWqOt3QjKU");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTssCreateNpTitleCtxA(void) {
@@ -160,54 +355,131 @@ int APS5_VABI sceNpTssCreateNpTitleCtxA(void) {
     return 0;
 }
 
-int APS5_VABI sceNpTusGetMultiUserDataStatusA(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserDataStatusA(int reqId, const std::uint64_t* targetAccountIdArray, std::int32_t slotId, void* statusArray, std::uint64_t statusArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(statusArray);
+    static_cast<void>(statusArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("lxNDPDnWfMc");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiSlotVariableForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiSlotVariableForCrossSave(int reqId, std::uint64_t targetAccountId, std::int32_t* slotIds, void* variableArray, std::uint64_t variablesSize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotIds);
+    static_cast<void>(variableArray);
+    static_cast<void>(variablesSize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("m9XZnxw9AmE");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetFriendsVariableForCrossSave(void) {
+std::int32_t APS5_VABI sceNpTusGetFriendsVariableForCrossSave(int reqId, std::int32_t slotId, std::int32_t includeSelf, std::int32_t sortType, void* variableArray, std::uint64_t variableArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(slotId);
+    static_cast<void>(includeSelf);
+    static_cast<void>(sortType);
+    static_cast<void>(variableArray);
+    static_cast<void>(variableArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("mD6s8HtMdpk");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusTryAndSetVariableAVUser(void) {
+std::int32_t APS5_VABI sceNpTusTryAndSetVariableAVUser(int reqId, const void* targetVirtualUserId, std::int32_t slotId, std::int32_t opeType, std::int64_t variable, const std::int64_t* compareValue, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* resultVariable, std::uint64_t resultVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotId);
+    static_cast<void>(opeType);
+    static_cast<void>(variable);
+    static_cast<void>(compareValue);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(resultVariable);
+    static_cast<void>(resultVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("oGIcxlUabSA");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiUserDataStatusForCrossSaveVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiUserDataStatusForCrossSaveVUser(int reqId, const void* targetVirtualUserIdArray, std::int32_t slotId, void* statusArray, std::uint64_t statusArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserIdArray);
+    static_cast<void>(slotId);
+    static_cast<void>(statusArray);
+    static_cast<void>(statusArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("w-c7U0MW2KY");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusAddAndGetVariableA(void) {
+std::int32_t APS5_VABI sceNpTusAddAndGetVariableA(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, std::int64_t inVariable, const std::uint64_t* isLastChangedAuthor, const void* isLastChangedDate, void* outVariable, std::uint64_t outVariableSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(inVariable);
+    static_cast<void>(isLastChangedAuthor);
+    static_cast<void>(isLastChangedDate);
+    static_cast<void>(outVariable);
+    static_cast<void>(outVariableSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("wPFah4-5Xec");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetMultiSlotVariableForCrossSaveVUser(void) {
+std::int32_t APS5_VABI sceNpTusGetMultiSlotVariableForCrossSaveVUser(int reqId, const void* virtualUserId, std::int32_t* slotIds, void* variableArray, std::uint64_t variablesSize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(virtualUserId);
+    static_cast<void>(slotIds);
+    static_cast<void>(variableArray);
+    static_cast<void>(variablesSize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("wTuuw4-6HI8");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusDeleteMultiSlotDataVUser(void) {
+std::int32_t APS5_VABI sceNpTusDeleteMultiSlotDataVUser(int reqId, const void* targetVirtualUserId, std::int32_t* slotIds, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetVirtualUserId);
+    static_cast<void>(slotIds);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("xutwCvsydkk");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetDataA(void) {
+std::int32_t APS5_VABI sceNpTusGetDataA(int reqId, std::uint64_t targetAccountId, std::int32_t slotId, void* dataStatus, std::uint64_t dataStatusSize, void* data, std::uint64_t recvSize, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(targetAccountId);
+    static_cast<void>(slotId);
+    static_cast<void>(dataStatus);
+    static_cast<void>(dataStatusSize);
+    static_cast<void>(data);
+    static_cast<void>(recvSize);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("yWEHUFkY1qI");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTusGetFriendsDataStatusA(void) {
+std::int32_t APS5_VABI sceNpTusGetFriendsDataStatusA(int reqId, std::int32_t slotId, std::int32_t includeSelf, std::int32_t sortType, void* statusArray, std::uint64_t statusArraySize, int arrayLen, void* option) {
+    static_cast<void>(reqId);
+    static_cast<void>(slotId);
+    static_cast<void>(includeSelf);
+    static_cast<void>(sortType);
+    static_cast<void>(statusArray);
+    static_cast<void>(statusArraySize);
+    static_cast<void>(arrayLen);
+    static_cast<void>(option);
     NotImplemented_nid_no_patch("yixh7HDKWfk");
-    return 0;
+    return {};
 }
 
 }

@@ -336,9 +336,11 @@ int APS5_VABI sceNpWebApiUnregisterExtdPushEventCallback(int titleUserCtxId, int
     return 0;
 }
 
-int APS5_VABI sceNpWebApiUtilityParseNpId(void) {
+std::int32_t APS5_VABI sceNpWebApiUtilityParseNpId(const char* pJsonNpId, void* pNpId) {
+    static_cast<void>(pJsonNpId);
+    static_cast<void>(pNpId);
     NotImplemented_nid_no_patch("or0e885BlXo");
-    return 0;
+    return {};
 }
 
 }

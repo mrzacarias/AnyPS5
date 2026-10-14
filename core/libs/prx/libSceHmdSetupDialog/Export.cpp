@@ -5,24 +5,26 @@
 
 extern "C" {
 
-int APS5_VABI sceHmdSetupDialogTerminate(void) {
+std::int32_t APS5_VABI sceHmdSetupDialogTerminate(void) {
     NotImplemented_nid_no_patch("+z4OJmFreZc");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceHmdSetupDialogGetResult(void) {
+std::int32_t APS5_VABI sceHmdSetupDialogGetResult(void* result) {
+    static_cast<void>(result);
     NotImplemented_nid_no_patch("6lVRHMV5LY0");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceHmdSetupDialogInitialize(void) {
+std::int32_t APS5_VABI sceHmdSetupDialogInitialize(void) {
     NotImplemented_nid_no_patch("NB1Y2kA2jCY");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceHmdSetupDialogOpen(void) {
+std::int32_t APS5_VABI sceHmdSetupDialogOpen(const void* param) {
+    static_cast<void>(param);
     NotImplemented_nid_no_patch("NNgiV4T+akU");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceHmdSetupDialogUpdateStatus(void) {
@@ -30,9 +32,9 @@ int APS5_VABI sceHmdSetupDialogUpdateStatus(void) {
     return 0;
 }
 
-int APS5_VABI sceHmdSetupDialogClose(void) {
+std::int32_t APS5_VABI sceHmdSetupDialogClose(void) {
     NotImplemented_nid_no_patch("nmHzU4Gh0xs");
-    return 0;
+    return {};
 }
 
 }

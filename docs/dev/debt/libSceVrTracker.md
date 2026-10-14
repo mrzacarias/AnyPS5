@@ -2,18 +2,18 @@
 
 ### Unknown function info
 
-- [sceVrTrackerCpuProcess](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerGetResult](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerUpdateMotionSensorData](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerResetOrientationRelative](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerRecalibrate](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerTerm](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerQueryMemory](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerUnregisterDevice](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerInit](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerGpuSubmit](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerNotifyEndOfCpuProcess](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerGetTime](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerGpuWait](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerRegisterDevice](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
-- [sceVrTrackerGetPlayAreaWarningInfo](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - unknown signature
+- [sceVrTrackerCpuProcess](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerGetResult](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerUpdateMotionSensorData](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerResetOrientationRelative](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerRecalibrate](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerTerm](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerQueryMemory](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerUnregisterDevice](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerInit](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerGpuSubmit](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerNotifyEndOfCpuProcess](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerGetTime](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerGpuWait](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerRegisterDevice](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4
+- [sceVrTrackerGetPlayAreaWarningInfo](../../../core/libs/prx/libSceVrTracker/Export.cpp) (libSceVrTracker) - signature from shadPS4

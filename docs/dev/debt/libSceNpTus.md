@@ -2,44 +2,44 @@
 
 ### Unknown function info
 
-- [sceNpTusGetDataForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetDataForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
 - [sceNpTssGetData](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusTryAndSetVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusSetMultiSlotVariableVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetDataForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusTryAndSetVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusSetMultiSlotVariableVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetDataForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
 - [sceNpTusCreateNpTitleCtxA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
 - [sceNpTusAbortRequest](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
 - [sceNpTusCreateRequest](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusAddAndGetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiSlotVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetFriendsVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusAddAndGetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiSlotVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetFriendsVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
 - [sceNpTusDeleteRequest](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusAddAndGetVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiSlotVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusAddAndGetVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiSlotVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiUserVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
 - [sceNpTusDeleteNpTitleCtx](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusTryAndSetVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusAddAndGetVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetFriendsDataStatusForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusSetDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserDataStatusForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusSetMultiSlotVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserDataStatusAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusTryAndSetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusDeleteMultiSlotDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetDataAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusSetDataAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusTryAndSetVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusAddAndGetVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiUserVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetFriendsDataStatusForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusSetDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiUserDataStatusForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusSetMultiSlotVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiUserDataStatusAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiUserVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusTryAndSetVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusDeleteMultiSlotDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetDataAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusSetDataAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
 - [sceNpTssCreateNpTitleCtxA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserDataStatusA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiSlotVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetFriendsVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusTryAndSetVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiUserDataStatusForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusAddAndGetVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetMultiSlotVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusDeleteMultiSlotDataVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
-- [sceNpTusGetFriendsDataStatusA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - unknown signature
+- [sceNpTusGetMultiUserDataStatusA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiSlotVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetFriendsVariableForCrossSave](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusTryAndSetVariableAVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiUserDataStatusForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusAddAndGetVariableA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetMultiSlotVariableForCrossSaveVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusDeleteMultiSlotDataVUser](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetDataA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4
+- [sceNpTusGetFriendsDataStatusA](../../../core/libs/prx/libSceNpTus/Export.cpp) (libSceNpTus) - signature from shadPS4

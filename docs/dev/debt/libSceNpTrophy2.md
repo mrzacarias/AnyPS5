@@ -7,10 +7,10 @@
 
 ### Unknown function info
 
-- [sceNpTrophyGetGameIcon](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
-- [sceNpTrophyGetGameInfo](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
-- [sceNpTrophyCaptureScreenshot](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
-- [sceNpTrophyGetTrophyIcon](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
-- [sceNpTrophyGetTrophyInfo](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
-- [sceNpTrophyGetGroupIcon](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
-- [sceNpTrophyGetGroupInfo](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - unknown signature
+- [sceNpTrophyGetGameIcon](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4
+- [sceNpTrophyGetGameInfo](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4
+- [sceNpTrophyCaptureScreenshot](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4
+- [sceNpTrophyGetTrophyIcon](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4
+- [sceNpTrophyGetTrophyInfo](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4
+- [sceNpTrophyGetGroupIcon](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4
+- [sceNpTrophyGetGroupInfo](../../../core/libs/prx/libSceNpTrophy2/src/Ps4.cpp) (libSceNpTrophy2) - signature from shadPS4

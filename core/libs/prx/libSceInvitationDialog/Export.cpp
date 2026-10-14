@@ -15,9 +15,10 @@ int APS5_VABI sceInvitationDialogTerminate(void) {
     return 0;
 }
 
-int APS5_VABI sceInvitationDialogGetResultA(void) {
+std::int32_t APS5_VABI sceInvitationDialogGetResultA(void* result) {
+    static_cast<void>(result);
     NotImplemented_nid_no_patch("WuuUhuKOxwQ");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceInvitationDialogInitialize(void) {

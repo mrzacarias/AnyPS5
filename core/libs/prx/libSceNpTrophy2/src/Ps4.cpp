@@ -33,9 +33,13 @@ int APS5_VABI sceNpTrophyDestroyHandle(int handle) {
     return 0;
 }
 
-int APS5_VABI sceNpTrophyGetGameIcon(void) {
+int APS5_VABI sceNpTrophyGetGameIcon(std::int32_t context, std::int32_t handle, void* buffer, std::uint64_t* size) {
+    static_cast<void>(context);
+    static_cast<void>(handle);
+    static_cast<void>(buffer);
+    static_cast<void>(size);
     NotImplemented_nid_no_patch("HLwz1fRIycA");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTrophyGetTrophyUnlockState(int context, int handle, NpTrophyFlagArray* flags, std::uint32_t* count) {
@@ -63,9 +67,13 @@ int APS5_VABI sceNpTrophyCreateContext(int* context, int userId, std::uint32_t s
     return 0;
 }
 
-int APS5_VABI sceNpTrophyGetGameInfo(void) {
+int APS5_VABI sceNpTrophyGetGameInfo(std::int32_t context, std::int32_t handle, void* details, void* data) {
+    static_cast<void>(context);
+    static_cast<void>(handle);
+    static_cast<void>(details);
+    static_cast<void>(data);
     NotImplemented_nid_no_patch("YYP3f2W09og");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTrophyAbortHandle(int handle) {
@@ -75,7 +83,7 @@ int APS5_VABI sceNpTrophyAbortHandle(int handle) {
 
 int APS5_VABI sceNpTrophyCaptureScreenshot(void) {
     NotImplemented_nid_no_patch("cqGkYAN-gRw");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTrophyShowTrophyList(int context, int handle) {
@@ -84,9 +92,14 @@ int APS5_VABI sceNpTrophyShowTrophyList(int context, int handle) {
     return 0;
 }
 
-int APS5_VABI sceNpTrophyGetTrophyIcon(void) {
+int APS5_VABI sceNpTrophyGetTrophyIcon(std::int32_t context, std::int32_t handle, std::int32_t trophyId, void* buffer, std::uint64_t* size) {
+    static_cast<void>(context);
+    static_cast<void>(handle);
+    static_cast<void>(trophyId);
+    static_cast<void>(buffer);
+    static_cast<void>(size);
     NotImplemented_nid_no_patch("eBL+l6HG9xk");
-    return 0;
+    return {};
 }
 
 int APS5_VABI sceNpTrophyCreateHandle(int* handle) {
@@ -95,19 +108,34 @@ int APS5_VABI sceNpTrophyCreateHandle(int* handle) {
     return 0;
 }
 
-int APS5_VABI sceNpTrophyGetTrophyInfo(void) {
+int APS5_VABI sceNpTrophyGetTrophyInfo(std::int32_t context, std::int32_t handle, std::int32_t trophyId, void* details, void* data) {
+    static_cast<void>(context);
+    static_cast<void>(handle);
+    static_cast<void>(trophyId);
+    static_cast<void>(details);
+    static_cast<void>(data);
     NotImplemented_nid_no_patch("qqUVGDgQBm0");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTrophyGetGroupIcon(void) {
+int APS5_VABI sceNpTrophyGetGroupIcon(std::int32_t context, std::int32_t handle, std::int32_t groupId, void* buffer, std::uint64_t* size) {
+    static_cast<void>(context);
+    static_cast<void>(handle);
+    static_cast<void>(groupId);
+    static_cast<void>(buffer);
+    static_cast<void>(size);
     NotImplemented_nid_no_patch("w4uMPmErD4I");
-    return 0;
+    return {};
 }
 
-int APS5_VABI sceNpTrophyGetGroupInfo(void) {
+int APS5_VABI sceNpTrophyGetGroupInfo(std::int32_t context, std::int32_t handle, std::int32_t groupId, void* details, void* data) {
+    static_cast<void>(context);
+    static_cast<void>(handle);
+    static_cast<void>(groupId);
+    static_cast<void>(details);
+    static_cast<void>(data);
     NotImplemented_nid_no_patch("wTUwGfspKic");
-    return 0;
+    return {};
 }
 
 }
