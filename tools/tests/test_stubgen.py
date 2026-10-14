@@ -29,6 +29,20 @@ class StubgenTests(unittest.TestCase):
         self.assertIn("APS5_VABI", code)
         self.assertIn("NotImplemented_nid_no_patch", code)
 
+    def test_signatures_type_the_stub(self):
+        signatures = {
+            "XbkjbobZlCY": {"name": "sceNpTrophyCreateContext", "returns": "std::int32_t", "params": [["std::int32_t*", "context"], ["std::int32_t", "new"], ["std::uint64_t", "options"]]},
+            "AAAAAAAAAAA": {"name": "Func_0000", "returns": "void", "params": []},
+        }
+        code, td = stubgen.generate("libSceNpTrophy", ["XbkjbobZlCY", "AAAAAAAAAAA"], {}, signatures=signatures)
+        self.assertIn("std::int32_t APS5_VABI sceNpTrophyCreateContext(std::int32_t* context, std::int32_t arg1, std::uint64_t options) {", code)
+        self.assertIn("    static_cast<void>(arg1);", code)
+        self.assertIn("    return {};", code)
+        self.assertIn('void APS5_VABI sceNpTrophyUnknown00(void) {', code)
+        self.assertIn("- [sceNpTrophyCreateContext]", td)
+        self.assertIn("(libSceNpTrophy) - signature from shadPS4", td)
+        self.assertIn("unknown name, signature from shadPS4", td)
+
 
 class StubGeneratorTests(unittest.TestCase):
     def test_default_stdout_contains_only_cpp(self):

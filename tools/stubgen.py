@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import re
 import sys
@@ -114,7 +115,26 @@ def td_target(module, td_path, td_lib):
     return (td_path, td_lib)
 
 
-def generate(module, nids, db, td_path=None, td_lib=None):
+CPP_KEYWORDS = {"alignas", "alignof", "and", "asm", "auto", "bool", "break", "case", "catch", "char", "class", "const", "continue", "default", "delete", "do", "double", "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "not", "operator", "or", "private", "protected", "public", "register", "return", "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "while", "xor"}
+
+
+def typed_definition(func, nid, typed):
+    names = []
+    for index, (_, name) in enumerate(typed["params"]):
+        if not is_valid_ident(name) or name in CPP_KEYWORDS or name in names:
+            name = "arg%d" % index
+        names.append(name)
+    params = ", ".join("%s %s" % (kind, name) for (kind, _), name in zip(typed["params"], names)) or "void"
+    lines = ["%s APS5_VABI %s(%s) {" % (typed["returns"], func, params)]
+    lines += ["    static_cast<void>(%s);" % name for name in names]
+    lines.append('    NotImplemented_nid_no_patch("%s");' % nid)
+    if typed["returns"] != "void":
+        lines.append("    return {};")
+    lines.append("}")
+    return lines
+
+
+def generate(module, nids, db, td_path=None, td_lib=None, signatures=None):
     prefix = module_prefix(module)
     path, lib = td_target(module, td_path, td_lib)
     used = set()
@@ -123,6 +143,10 @@ def generate(module, nids, db, td_path=None, td_lib=None):
     td = []
     for nid in nids:
         real = db.get(nid)
+        typed = (signatures or {}).get(nid)
+        typed = typed if typed is not None and "returns" in typed else None
+        if real is None and typed is not None and compute_nid(typed["name"]) == nid:
+            real = typed["name"]
         func = None
         display = None
         if real is not None:
@@ -143,21 +167,17 @@ def generate(module, nids, db, td_path=None, td_lib=None):
                     break
             display = None
         used.add(func)
+        body = typed_definition(func, nid, typed) if typed is not None else ["int APS5_VABI %s(void) {" % func, '    NotImplemented_nid_no_patch("%s");' % nid, "    return 0;", "}"]
+        signature_note = "signature from shadPS4" if typed is not None else "unknown signature"
         if display is not None:
             chunks.append("")
-            chunks.append("int APS5_VABI %s(void) {" % func)
-            chunks.append('    NotImplemented_nid_no_patch("%s");' % nid)
-            chunks.append("    return 0;")
-            chunks.append("}")
-            td.append("- [%s](%s) (%s) - unknown signature" % (display, path, lib))
+            chunks.extend(body)
+            td.append("- [%s](%s) (%s) - %s" % (display, path, lib, signature_note))
         else:
             chunks.append("")
             chunks.append('APS5_EXPORT("%s", %s);' % (nid, func))
-            chunks.append("int APS5_VABI %s(void) {" % func)
-            chunks.append('    NotImplemented_nid_no_patch("%s");' % nid)
-            chunks.append("    return 0;")
-            chunks.append("}")
-            td.append("- [%s](%s) (%s) - unknown name, signature" % (nid, path, lib))
+            chunks.extend(body)
+            td.append("- [%s](%s) (%s) - unknown name, %s" % (nid, path, lib, "signature from shadPS4" if typed is not None else "signature"))
     header = []
     header.append("#include <cstdint>")
     header.append("#include <cstddef>")
@@ -210,6 +230,7 @@ def main(argv=None):
     ap.add_argument("--td-lib", required=False, default=None, help="override lib label used inside TechnicalDebt lines, default derived from module")
     ap.add_argument("--td-out", required=False, default=None, help="output file for TechnicalDebt lines, which go in docs/dev/debt/MODULE.md, default stderr when code uses stdout, otherwise stdout")
     ap.add_argument("--td-only", action="store_true", help="print only TechnicalDebt lines, no code")
+    ap.add_argument("--signatures", required=False, default=None, help="NID signature index from tools/shadps4_signatures.py; typed stubs use it")
     args = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", newline="\n")
@@ -223,7 +244,8 @@ def main(argv=None):
                     ap.error(f"output {destination!r} would overwrite input {source!r}")
         nids = parse_nids(args.nids)
         db = parse_db(args.db) if args.db else {}
-        code, td = generate(args.module, nids, db, args.td_path, args.td_lib)
+        signatures = json.loads(Path(args.signatures).read_text(encoding="utf-8")) if args.signatures else None
+        code, td = generate(args.module, nids, db, args.td_path, args.td_lib, signatures)
         outputs = []
         if not args.td_only and args.out:
             outputs.append((args.out, code))
