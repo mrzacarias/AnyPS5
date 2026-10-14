@@ -106,6 +106,16 @@ RdnaProgram DecodeStageProgram(ShaderStageKind stage, std::span<const std::uint3
     return program;
 }
 
+// The image instructions of a GCN program take the dimension of the T#s that the request's user data and memory give
+// them (GcnImageDimensions).
+RdnaProgram DecodeRequestProgram(const RecompileRequest& request, std::span<const std::uint32_t> code) {
+    const auto stage = toShaderStageKind(request.shader.stage);
+    if (!GcnShaderCode()) return DecodeStageProgram(stage, code);
+    const auto dimensions = RequestImageDimensions(request);
+    const GcnImageDimensionScope scope(dimensions);
+    return DecodeStageProgram(stage, code);
+}
+
 ShaderStageInputInfo RequestInputInfo(const RecompileRequest& request) {
     const auto* mesh = request.graphics && request.graphics->mesh ? &*request.graphics->mesh : nullptr;
     const auto* tessellation = request.graphics && request.graphics->tessellation ? &*request.graphics->tessellation : nullptr;
@@ -120,10 +130,17 @@ std::uint32_t DeviceMemoryLdsBytes(const RecompileRequest& request) {
 
 }
 
+std::unordered_map<std::uint32_t, std::uint32_t> RequestImageDimensions(const RecompileRequest& request) {
+    if (!GcnShaderCode()) return {};
+    RequestMemoryView memory(request.context.memory);
+    const auto runtime = memory.MakeRuntime(request.context.userData, request.shader.codeAddress);
+    return GcnImageDimensions(request.shader.code, request.context.userData, request.context.userDataBaseRegister, [&](std::uint64_t address, std::uint32_t& value) { return runtime.readMemory(runtime.userContext, address, &value) || ReadGcnGuestMemory(address, value); });
+}
+
 struct PreparedControlFlow {
     PreparedControlFlow(const RecompileRequest& request, const SwappcInfo& swappcInfo)
         : stage(request.shader.stage), swappc(swappcInfo), code(request.shader.code.begin(), request.shader.code.end()),
-          decoded(DecodeStageProgram(toShaderStageKind(request.shader.stage), code)), cfg(GraphBuilder{}.Build(decoded, &swappc)) {
+          decoded(DecodeRequestProgram(request, code)), cfg(GraphBuilder{}.Build(decoded, &swappc)) {
         Structurizer{}.Structurize(cfg);
     }
 

@@ -928,6 +928,14 @@ void BuildKey(const RecompileRequest& request, std::uint32_t hostSubgroupSize, s
     writer.Values(std::span<const std::uint64_t>(memoryKey));
     writer.Values(request.shader.code);
     writer.Value(GcnShaderCode());
+    const auto dimensions = RequestImageDimensions(request);
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> images(dimensions.begin(), dimensions.end());
+    std::ranges::sort(images);
+    writer.Value(images.size());
+    for (const auto& [programCounter, dimension] : images) {
+        writer.Value(programCounter);
+        writer.Value(dimension);
+    }
     writer.Value(hostSubgroupSize);
     writer.Value(request.layout.descriptorSet);
     writer.Value(request.layout.firstBinding);

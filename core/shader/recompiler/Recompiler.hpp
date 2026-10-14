@@ -13,6 +13,7 @@
 #include <utility>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 namespace ShaderRecompiler {
@@ -575,6 +576,10 @@ struct RecompileResult : CompiledShaderArtifact, ShaderInvocation {
     std::vector<std::uint32_t> shaderDataUserWords;
     [[nodiscard]] std::uint64_t PipelineVariantId() const { return specializationId != 0 ? specializationId : variantId; }
 };
+
+// The RDNA dimension of each image instruction of a GCN program, by program counter, from the T#s that the request's
+// user data and memory, or guest memory, give it (GcnImageDimensions); empty for RDNA code. The disk cache keys it.
+[[nodiscard]] std::unordered_map<std::uint32_t, std::uint32_t> RequestImageDimensions(const RecompileRequest& request);
 
 [[nodiscard]] RecompileResult Recompile(const RecompileRequest& request);
 

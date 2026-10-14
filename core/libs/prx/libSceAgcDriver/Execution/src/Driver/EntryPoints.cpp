@@ -1,7 +1,10 @@
 #include "prx/libSceAgcDriver/Execution/include/ThreadPriority.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
+#include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "RdnaDecoder/GcnInstructionDecoder.hpp"
+#include <exception>
 #include <mutex>
+#include <span>
 
 namespace AgcDriver {
 
@@ -67,6 +70,15 @@ extern "C" void AgcDriverSubmit_nid_postfix(const Packet* packet, std::uint32_t 
 
 extern "C" void AgcDriverUseGcnShaders_nid_postfix() {
     ShaderRecompiler::SetGcnShaderCode(true);
+    // A GCN image instruction's dimension comes from a T# its scalar code may load from any guest table.
+    ShaderRecompiler::SetGcnGuestMemoryReader([](std::uint64_t address, std::uint32_t* value) {
+        try {
+            AgcDriver::GuestMemory::Read(address, std::as_writable_bytes(std::span(value, 1)), 4);
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    });
 }
 
 extern "C" void AgcDriverWaitIdle_nid_postfix() try {

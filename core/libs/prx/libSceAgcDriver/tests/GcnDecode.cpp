@@ -1,9 +1,11 @@
 #include "ControlFlow/GraphBuilder.hpp"
 #include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "RdnaDecoder/RdnaInstructionDecoder.hpp"
+#include <array>
 #include <cstdio>
 #include <exception>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace ShaderRecompiler;
@@ -115,6 +117,31 @@ int main() {
         check(sample.op == RdnaOpcode::ImageSample && sample.imageDimension == RdnaImageDimension::Dim2D, "image_sample", "not a 2D sample");
         const auto arraySample = decode({(0x3cu << 26u) | (0x20u << 18u) | (1u << 14u) | (0xfu << 8u), 1u | (4u << 8u) | (2u << 16u) | (3u << 21u)});
         check(arraySample.imageDimension == RdnaImageDimension::Dim2DArray, "image_sample da", "not a 2D array sample");
+
+        // GCN image instructions read the dimension of their T#: a 3D T# in user data s[8:15], a 2D array T# that
+        // s_load_dwordx8 brings to s[16:23] from the table s[0:1] points at, and in s[24:31] one the scan cannot know.
+        {
+            const auto mimg = [](bool array, std::uint32_t resource) { return std::array<std::uint32_t, 2>{(0x3cu << 26u) | (0x20u << 18u) | ((array ? 1u : 0u) << 14u) | (0xfu << 8u), 1u | (4u << 8u) | ((resource / 4u) << 16u) | (3u << 21u)}; };
+            std::vector<std::uint32_t> code{smrd(3u, 16u, 0u, true, 0u)};
+            for (const auto& [array, resource] : {std::pair{false, 8u}, std::pair{true, 16u}, std::pair{false, 24u}}) {
+                const auto words = mimg(array, resource);
+                code.insert(code.end(), words.begin(), words.end());
+            }
+            code.push_back(EndProgram);
+            std::vector<std::uint32_t> userData(16u, 0u);
+            userData[0] = 0x1000u;
+            userData[1] = 1u;
+            userData[11] = 0xa0000facu;
+            const auto read = [](std::uint64_t address, std::uint32_t& value) {
+                if (address < 0x100001000ull || address >= 0x100001020ull) return false;
+                value = address == 0x10000100cull ? 0xd0000facu : 0u;
+                return true;
+            };
+            const auto dimensions = GcnImageDimensions(code, userData, 0u, read);
+            check(dimensions.size() == 2u && dimensions.contains(4u) && dimensions.at(4u) == 2u && dimensions.contains(12u) && dimensions.at(12u) == 5u, "GcnImageDimensions", "the 3D and the loaded 2D array T# do not give their instructions their dimensions, or the unknown one does");
+            const GcnImageDimensionScope scope(dimensions);
+            check(DecodeRdnaInstruction(4u, code, 1u).imageDimension == RdnaImageDimension::Dim3D && DecodeRdnaInstruction(20u, code, 5u).imageDimension == RdnaImageDimension::Dim2D, "GcnImageDimensionScope", "the 3D sample is not 3D, or the unknown one is not 2D");
+        }
 
         // GCN program counters: the one-word SMRD keeps the branch target at its GCN address.
         const std::vector<std::uint32_t> program{0xc2060900u, 0xbf820000u, EndProgram};

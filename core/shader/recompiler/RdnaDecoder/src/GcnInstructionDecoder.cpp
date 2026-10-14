@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <exception>
+#include <optional>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
@@ -34,6 +36,8 @@ constexpr std::uint32_t NullScalar = 125u;
 constexpr std::uint32_t VccLo = 106u;
 
 std::atomic<bool> gcnShaderCode{false};
+std::atomic<bool (*)(std::uint64_t, std::uint32_t*)> guestMemoryReader{nullptr};
+thread_local const std::unordered_map<std::uint32_t, std::uint32_t>* imageDimensions = nullptr;
 
 std::string hex(std::uint32_t value) {
     char text[11];
@@ -103,6 +107,22 @@ std::uint32_t smemOpcode(std::uint32_t opcode, std::uint32_t programCounter) {
     }
 }
 
+// The RDNA DIM of a GCN T# type (word 3 bits 31:28) for an image instruction that declares an array or not; a cube is
+// read as the 2D array of its faces, as GCN programs address it.
+std::optional<std::uint32_t> imageDimension(std::uint32_t type, bool array) {
+    switch (type) {
+        case 8: return array ? std::nullopt : std::optional<std::uint32_t>(0u);
+        case 9: return array ? std::nullopt : std::optional<std::uint32_t>(1u);
+        case 10: return array ? std::nullopt : std::optional<std::uint32_t>(2u);
+        case 11: return array ? std::optional<std::uint32_t>(5u) : std::nullopt;
+        case 12: return array ? std::optional<std::uint32_t>(4u) : std::nullopt;
+        case 13: return array ? std::optional<std::uint32_t>(5u) : std::nullopt;
+        case 14: return array ? std::nullopt : std::optional<std::uint32_t>(6u);
+        case 15: return array ? std::optional<std::uint32_t>(7u) : std::nullopt;
+        default: return std::nullopt;
+    }
+}
+
 void requireWords(std::span<const std::uint32_t> code, std::uint32_t wordIndex, std::uint32_t count, std::uint32_t programCounter) {
     if (code.size() - wordIndex < count) {
         throw std::out_of_range("truncated GCN instruction at program counter " + hex(programCounter));
@@ -117,6 +137,105 @@ void SetGcnShaderCode(bool gcn) {
 
 bool GcnShaderCode() {
     return gcnShaderCode.load(std::memory_order_relaxed);
+}
+
+void SetGcnGuestMemoryReader(bool (*read)(std::uint64_t address, std::uint32_t* value)) {
+    guestMemoryReader.store(read, std::memory_order_relaxed);
+}
+
+bool ReadGcnGuestMemory(std::uint64_t address, std::uint32_t& value) {
+    const auto read = guestMemoryReader.load(std::memory_order_relaxed);
+    return read != nullptr && read(address, &value);
+}
+
+GcnImageDimensionScope::GcnImageDimensionScope(const std::unordered_map<std::uint32_t, std::uint32_t>& dimensions) : previous(imageDimensions) {
+    imageDimensions = &dimensions;
+}
+
+GcnImageDimensionScope::~GcnImageDimensionScope() {
+    imageDimensions = previous;
+}
+
+std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, std::uint32_t userDataBase, const std::function<bool(std::uint64_t address, std::uint32_t& value)>& read) {
+    std::unordered_map<std::uint32_t, std::uint32_t> dimensions;
+    std::array<std::optional<std::uint32_t>, 104> scalars{};
+    for (std::size_t index = 0; index < userData.size() && userDataBase + index < scalars.size(); ++index) scalars[userDataBase + index] = userData[index];
+    const auto scalar = [&](const RdnaOperand& operand) -> std::optional<std::uint32_t> {
+        switch (operand.kind) {
+            case RdnaOperandKind::ScalarRegister: return operand.reg < scalars.size() ? scalars[operand.reg] : std::nullopt;
+            case RdnaOperandKind::LiteralConstant: return operand.value;
+            case RdnaOperandKind::IntegerInlineConstant: return static_cast<std::uint32_t>(operand.signedVal);
+            case RdnaOperandKind::Null: return 0u;
+            default: return std::nullopt;
+        }
+    };
+    const auto forget = [&](const RdnaOperand& operand, std::uint32_t count) {
+        if (operand.kind != RdnaOperandKind::ScalarRegister) return;
+        for (auto reg = operand.reg; reg < operand.reg + count && reg < scalars.size(); ++reg) scalars[reg].reset();
+    };
+    for (std::uint32_t word = 0; word < code.size();) {
+        RdnaInstruction instruction;
+        try {
+            instruction = DecodeGcnInstruction(word * 4u, code, word);
+        } catch (const std::exception&) {
+            break;
+        }
+        const auto destination = instruction.destination;
+        switch (instruction.op) {
+            case RdnaOpcode::SLoadDword: case RdnaOpcode::SLoadDwordx2: case RdnaOpcode::SLoadDwordx4: case RdnaOpcode::SLoadDwordx8: case RdnaOpcode::SLoadDwordx16:
+            case RdnaOpcode::SBufferLoadDword: case RdnaOpcode::SBufferLoadDwordx2: case RdnaOpcode::SBufferLoadDwordx4: case RdnaOpcode::SBufferLoadDwordx8: case RdnaOpcode::SBufferLoadDwordx16: {
+                // s_load reads from the address in its register pair, s_buffer_load from the base of its V#.
+                const auto base = instruction.source0.reg;
+                const auto low = base < scalars.size() ? scalars[base] : std::nullopt;
+                const auto high = base + 1u < scalars.size() ? scalars[base + 1u] : std::nullopt;
+                const auto offset = scalar(instruction.source1);
+                std::array<std::uint32_t, 16> values{};
+                bool loaded = instruction.source0.kind == RdnaOperandKind::ScalarRegister && low && high && offset;
+                const auto address = loaded ? (*low | (static_cast<std::uint64_t>(*high & 0xffffu) << 32u)) + instruction.memoryOffset + *offset : 0u;
+                for (std::uint32_t index = 0; loaded && index < instruction.dataDwordCount; ++index) loaded = read(address + index * 4u, values[index]);
+                forget(destination, instruction.dataDwordCount);
+                if (loaded && destination.kind == RdnaOperandKind::ScalarRegister) {
+                    for (std::uint32_t index = 0; index < instruction.dataDwordCount && destination.reg + index < scalars.size(); ++index) scalars[destination.reg + index] = values[index];
+                }
+                break;
+            }
+            case RdnaOpcode::SMovB32: {
+                const auto value = scalar(instruction.source0);
+                forget(destination, 1u);
+                if (destination.kind == RdnaOperandKind::ScalarRegister && destination.reg < scalars.size()) scalars[destination.reg] = value;
+                break;
+            }
+            case RdnaOpcode::SMovB64: {
+                const auto low = scalar(instruction.source0);
+                auto next = instruction.source0;
+                ++next.reg;
+                const auto high = instruction.source0.kind == RdnaOperandKind::ScalarRegister ? scalar(next) : instruction.source0.kind == RdnaOperandKind::IntegerInlineConstant && instruction.source0.signedVal < 0 ? std::optional<std::uint32_t>(0xffffffffu) : std::optional<std::uint32_t>(0u);
+                forget(destination, 2u);
+                if (destination.kind == RdnaOperandKind::ScalarRegister && destination.reg + 1u < scalars.size()) {
+                    scalars[destination.reg] = low;
+                    scalars[destination.reg + 1u] = low ? high : std::nullopt;
+                }
+                break;
+            }
+            case RdnaOpcode::SSwappcB64:
+                // The fetch shader it calls writes registers this reading does not follow.
+                scalars.fill(std::nullopt);
+                break;
+            default:
+                if ((code[word] >> 26u) == 0x3cu && word + 1u < code.size()) {
+                    const auto resource = ((code[word + 1u] >> 16u) & 0x1fu) * 4u;
+                    const bool known = resource + 8u <= scalars.size() && std::all_of(scalars.begin() + resource, scalars.begin() + resource + 8u, [](const auto& value) { return value.has_value(); });
+                    if (known) {
+                        if (const auto dimension = imageDimension(*scalars[resource + 3u] >> 28u, ((code[word] >> 14u) & 1u) != 0u)) dimensions.emplace(word * 4u, *dimension);
+                    }
+                }
+                forget(destination, instruction.is64Bit ? 2u : 1u);
+                forget(instruction.destination2, 2u);
+                break;
+        }
+        word += instruction.wordCount;
+    }
+    return dimensions;
 }
 
 std::uint32_t GcnBufferFormat(std::uint32_t dataFormat, std::uint32_t numberFormat) {
@@ -323,10 +442,15 @@ RdnaInstruction DecodeGcnInstruction(std::uint32_t programCounter, std::span<con
                 break;
             }
             case 0x3cu: {
-                // GCN images take their dimension from the resource; the instruction only says whether it is an array.
+                // GCN images take their dimension from the resource; the instruction only says whether it is an array
+                // (GcnImageDimensionScope).
                 requireWords(code, wordIndex, 2u, programCounter);
                 const bool array = ((word >> 14u) & 1u) != 0u;
-                rdna = {(word & ~(1u << 14u)) | ((array ? 5u : 1u) << 3u), code[wordIndex + 1u]};
+                auto dimension = array ? 5u : 1u;
+                if (imageDimensions != nullptr) {
+                    if (const auto found = imageDimensions->find(programCounter); found != imageDimensions->end()) dimension = found->second;
+                }
+                rdna = {(word & ~(1u << 14u)) | (dimension << 3u), code[wordIndex + 1u]};
                 rdnaWords = gcnWords = 2;
                 break;
             }

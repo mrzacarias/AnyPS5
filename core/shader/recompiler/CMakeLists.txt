@@ -251,11 +251,16 @@ function(add_shader_recompiler target runtimeTarget)
             GcnBufferDescriptor
             GcnBufferFormat
             GcnImageDescriptor
+            GcnImageDimensions
+            GcnImageDimensionScope
             GcnShaderCode
+            ReadGcnGuestMemory
+            RequestImageDimensions
             RdnaInstructionFamily
             RdnaInstructionToString
             RdnaOpcode
             RdnaOperandKind
+            SetGcnGuestMemoryReader
             SetGcnShaderCode
             ShaderCacheDirectory
             SrgbDecodeBit

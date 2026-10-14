@@ -1,3 +1,4 @@
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "ShaderDiskCache.hpp"
 #include "CacheKey.hpp"
 #include "VertexInputSpecialization.hpp"
@@ -372,6 +373,24 @@ void verifyArtifactStorageIsolation() {
     result.vertexInputs[0].components = 2;
     variant.artifact = result;
     require(ShaderDiskCache::EncodeEntry(key, variant) != before, "the stored artifact ignores vertex input metadata");
+}
+
+// A GCN image instruction takes the dimension of its T# (RequestImageDimensions), so the key holds it, but not the
+// T#'s address.
+void verifyGcnImageDimensionKey() {
+    SampleRequest sample;
+    sample.code = {(0x3cu << 26u) | (0x20u << 18u) | (0xfu << 8u), 1u | (4u << 8u) | (2u << 21u), 0xbf810000u};
+    sample.userData.assign(12u, 0u);
+    sample.userData[3] = 0x90000facu;
+    SetGcnShaderCode(true);
+    const auto flat = sample.Key();
+    sample.userData[3] = 0xa0000facu;
+    const auto volume = sample.Key();
+    sample.userData[0] = 0x1234u;
+    const auto moved = sample.Key();
+    SetGcnShaderCode(false);
+    require(flat != volume, "a 3D T# for a GCN image instruction did not change the key");
+    require(moved == volume, "the address of a GCN image instruction's T# changed the key");
 }
 
 void verifyKeySensitivity() {
@@ -1109,6 +1128,7 @@ int main(int argc, char** argv) {
         verifyEntryRoundTrip();
         verifyArtifactStorageIsolation();
         verifyKeySensitivity();
+        verifyGcnImageDimensionKey();
         verifyFloatModeSerialization();
         verifyStore();
         verifyAcrossProcesses(argv[0]);
