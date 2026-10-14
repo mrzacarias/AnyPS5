@@ -29,6 +29,7 @@ void Driver::lookupDraw(const Submission& submission, const std::shared_ptr<Vulk
                 for (const auto value : {tess.inputControlPoints, tess.outputControlPoints, tess.domain, tess.partitioning, tess.outputTopology, tess.patchesPerGroup}) mix(value);
             }
             mix(graphics.rectList);
+            mix(graphics.quadList);
             mix(programs.size());
             for (std::size_t i = 0; i < programs.size(); ++i) {
                 const auto& program = programs[i];

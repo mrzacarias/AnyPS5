@@ -107,6 +107,8 @@ struct State {
     std::vector<VkPipelineColorBlendAttachmentState> blends;
     bool hasColorTarget;
     bool rectList = false;
+    // A quad list (primitive type 19), drawn as two triangles per quad from an expanded index buffer.
+    bool quadList = false;
     bool dualSourceBlend = false;
     VkExtent2D renderExtent;
     std::uint32_t renderLayers = 1;

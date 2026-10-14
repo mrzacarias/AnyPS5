@@ -22,6 +22,7 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <numeric>
 #include <optional>
 #include <cstdio>
 #include <cstdlib>
@@ -988,6 +989,8 @@ struct DrawInputs {
     VkPipelineStageFlags shaderStages = 0;
     std::uint32_t meshGroups = 0;
     std::vector<std::uint32_t> restartTable;
+    // A quad list's indices, two triangles for each quad.
+    std::uint32_t quadIndexCount = 0;
 };
 
 std::shared_ptr<Buffer> zeroVertexBuffer(const Context& context, const ShaderRecompiler::VertexAttribute& attribute) {
@@ -1027,7 +1030,7 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
             Require(draw.firstInstance <= std::numeric_limits<std::uint32_t>::max() - (draw.instanceCount - 1u), "auto draw instance range overflow");
         }
     }
-    if (args != nullptr) Require((!state.stages.mesh || draw.indexed) && !state.stages.tessellation && !state.rectList, "indirect draw on a non-vertex path must be resolved by the driver");
+    if (args != nullptr) Require((!state.stages.mesh || draw.indexed) && !state.stages.tessellation && !state.rectList && !state.quadList, "indirect draw on a non-vertex path must be resolved by the driver");
     inputs.indexBytes = static_cast<std::uint64_t>(draw.indexCount) * draw.indexSize;
     const auto indexBytes = inputs.indexBytes;
     APS5_LOG_OUT_DEBUG("Index buffer bytes=%llu", static_cast<unsigned long long>(indexBytes));
@@ -1065,7 +1068,41 @@ DrawInputs prepareDrawInputs(const Context& context, const State& state, const P
     ValidateDepthBounds(context, state);
     timer.phase(PhaseValidate);
     inputs.maxIndex = draw.indexed ? 0u : draw.firstVertex + draw.indexCount - 1u;
-    if (draw.indexed) {
+    if (state.quadList) {
+        // GCN splits each quad v0 v1 v2 v3 into the triangles v0 v1 v2 and v0 v2 v3; a trailing partial quad draws nothing.
+        const auto quads = draw.indexCount / 4u;
+        if (quads == 0) {
+            inputs.nothing = true;
+            return inputs;
+        }
+        std::vector<std::uint32_t> source(static_cast<std::size_t>(quads) * 4u);
+        if (draw.indexed) {
+            std::vector<std::byte> bytes(source.size() * draw.indexSize);
+            GuestMemory::FlushGpuWrites(draw.indexAddress, bytes.size());
+            GuestMemory::Read(draw.indexAddress, bytes, draw.indexSize);
+            for (std::size_t i = 0; i < source.size(); ++i) {
+                if (draw.indexSize == 2) {
+                    std::uint16_t index = 0;
+                    std::memcpy(&index, bytes.data() + i * 2u, 2u);
+                    source[i] = index;
+                } else {
+                    std::memcpy(&source[i], bytes.data() + i * 4u, 4u);
+                }
+            }
+            const auto restart = draw.indexSize == 2 ? 0xffffu : 0xffffffffu;
+            Require(!state.primitiveRestart || std::find(source.begin(), source.end(), restart) == source.end(), "primitive restart in a quad list is unsupported");
+            inputs.maxIndex = *std::max_element(source.begin(), source.end());
+        } else {
+            std::iota(source.begin(), source.end(), 0u);
+        }
+        inputs.indices = std::make_shared<Buffer>(context, source.size() / 4u * 6u * sizeof(std::uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+        auto* out = reinterpret_cast<std::uint32_t*>(inputs.indices->Bytes().data());
+        for (std::size_t quad = 0; quad < source.size(); quad += 4u) {
+            for (const auto corner : {0u, 1u, 2u, 0u, 2u, 3u}) *out++ = source[quad + corner];
+        }
+        inputs.quadIndexCount = quads * 6u;
+        inputs.indexHandle = inputs.indices->Handle();
+    } else if (draw.indexed) {
         const bool listTopology = state.topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST || state.topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST || state.topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         const bool fanGeometry = state.stages.mesh && state.stages.mesh->inputPrimitive == 5;
         const bool skipRestart = state.primitiveRestart && (!listTopology || context.primitiveListRestart) && !fanGeometry;
@@ -1340,6 +1377,11 @@ void recordDrawCommands(const Context& context, VkCommandBuffer commands, const 
         return;
     }
     if (!inputs.vertexHandles.empty()) context.Resolved(&DeviceFunctions::cmdBindVertexBuffers, "vkCmdBindVertexBuffers")(commands, 0, static_cast<std::uint32_t>(inputs.vertexHandles.size()), inputs.vertexHandles.data(), inputs.vertexOffsets.data());
+    if (state.quadList) {
+        context.Resolved(&DeviceFunctions::cmdBindIndexBuffer, "vkCmdBindIndexBuffer")(commands, inputs.indexHandle, 0, VK_INDEX_TYPE_UINT32);
+        context.Resolved(&DeviceFunctions::cmdDrawIndexed, "vkCmdDrawIndexed")(commands, inputs.quadIndexCount, draw.instanceCount, 0, static_cast<std::int32_t>(draw.firstVertex), draw.firstInstance);
+        return;
+    }
     if (draw.indexed) context.Resolved(&DeviceFunctions::cmdBindIndexBuffer, "vkCmdBindIndexBuffer")(commands, inputs.indexHandle, inputs.indexOffset, draw.indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
     if (args == nullptr) {
         if (draw.indexed) context.Resolved(&DeviceFunctions::cmdDrawIndexed, "vkCmdDrawIndexed")(commands, draw.indexCount, draw.instanceCount, 0, static_cast<std::int32_t>(draw.firstVertex), draw.firstInstance);
