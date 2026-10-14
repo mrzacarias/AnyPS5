@@ -270,19 +270,6 @@ ShaderRecompiler::ShaderVertexStageInfo DecodeVertexStageInfo(std::span<const st
     return info;
 }
 
-namespace {
-
-// A GCN (GFX7) buffer V# in the RDNA layout: the data and number formats become one RDNA format and the
-// resource level is 1.
-std::array<std::uint32_t, 4> rdnaBufferDescriptor(const std::array<std::uint32_t, 4>& gcn) {
-    if ((gcn[1] >> 30u) != 0u) throw std::runtime_error("AGC graphics: swizzled PS4 vertex buffers are unsupported");
-    const auto dataFormat = (gcn[3] >> 15u) & 0xfu;
-    const auto format = dataFormat == 0u ? 0u : ShaderRecompiler::GcnBufferFormat(dataFormat, (gcn[3] >> 12u) & 7u);
-    return {gcn[0], gcn[1], gcn[2], (gcn[3] & 0xe00fffu) | (format << 12u) | (1u << 24u)};
-}
-
-}
-
 ShaderRecompiler::ShaderVertexStageInfo DecodePs4VertexStageInfo(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads) {
     ShaderRecompiler::ShaderVertexStageInfo info{};
     // The program starts with scalar moves and markers, then calls the fetch shader through a user-data pair.
@@ -345,8 +332,13 @@ ShaderRecompiler::ShaderVertexStageInfo DecodePs4VertexStageInfo(std::span<const
         if (info.resourcesNum >= ShaderRecompiler::ShaderVertexStageInfo::MaxResources) throw std::runtime_error("AGC graphics: vertex resource count exceeds the supported domain");
         auto& resource = info.resources[info.resourcesNum];
         auto& destination = info.resourcesDst[info.resourcesNum];
-        resource.fields = rdnaBufferDescriptor({scalars[sharp], scalars[sharp + 1u], scalars[sharp + 2u], scalars[sharp + 3u]});
-        if (instruction.memoryOffset != 0u) {
+        // A slot the title leaves unwritten can hold any words (Inscryption keeps half a T# there for an input its mesh
+        // lacks); a word 3 that is no buffer's, an invalid data format, which GCN reads as zeros, or a swizzled buffer
+        // gives the attribute a null V#, which reads zeros.
+        const std::array<std::uint32_t, 4> sharpWords{scalars[sharp], scalars[sharp + 1u], scalars[sharp + 2u], scalars[sharp + 3u]};
+        const bool buffer = (sharpWords[3] >> 30u) == 0u && ((sharpWords[3] >> 15u) & 0xfu) != 0u && (sharpWords[1] >> 31u) == 0u;
+        resource.fields = buffer ? ShaderRecompiler::GcnBufferDescriptor(sharpWords) : std::array<std::uint32_t, 4>{};
+        if (buffer && instruction.memoryOffset != 0u) {
             const auto base = ((static_cast<std::uint64_t>(resource.fields[0]) | (static_cast<std::uint64_t>(resource.fields[1]) << 32u)) & 0xffffffffffffull) + instruction.memoryOffset;
             resource.fields[0] = static_cast<std::uint32_t>(base & 0xffffffffu);
             resource.fields[1] = (resource.fields[1] & 0xffff0000u) | static_cast<std::uint32_t>((base >> 32u) & 0xffffu);

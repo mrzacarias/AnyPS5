@@ -101,6 +101,15 @@ int main() {
         const auto typed = decode({(0x3au << 26u) | (7u << 23u) | (14u << 19u) | (3u << 16u), 1u | (2u << 8u) | (1u << 16u) | (128u << 24u)});
         check(typed.op == RdnaOpcode::TbufferLoadFormatXyzw && ((typed.numberFormat << 4u) | typed.dataFormat) == 77u, "tbuffer_load_format_xyzw", "32_32_32_32 float is not RDNA buffer format 77");
         check(GcnBufferFormat(6u, 7u) == 36u && GcnBufferFormat(10u, 0u) == 56u && GcnBufferFormat(9u, 4u) == 54u, "GcnBufferFormat", "wrong RDNA buffer formats");
+        check(GcnImageFormat(10u, 9u) == 130u && GcnImageFormat(35u, 0u) == 169u && GcnImageFormat(37u, 9u) == 174u && GcnImageFormat(16u, 0u) == 133u, "GcnImageFormat", "wrong RDNA image formats");
+        // Inscryption's 960x540 16_16_16_16 float target as a T#: the L2 memory type in word 1 is no address bit.
+        const auto image = GcnImageDescriptor({0x03b39c00u, 0xdcc00040u, 0x7086c3bfu, 0x90e00facu, 0u, 0u, 0u, 0u});
+        check(image == std::array<std::uint32_t, 8>{0x03b39c00u, 0xc4700000u, 0x8086c0efu, 0x90000facu, 0u, 0u, 0u, 0u}, "GcnImageDescriptor", "960x540 T# has the wrong RDNA words");
+        const auto cube = GcnImageDescriptor({0x1000u, 0x02800000u, 0u, 0xb0000facu, 0u, 5u << 13u, 0u, 0u});
+        check((cube[3] >> 28u) == 13u && (cube[4] & 0x1fffu) == 5u, "GcnImageDescriptor cube", "a cube is not a 2D array of six faces");
+        // A V#: 40 address bits, stride 20, 32_32 float; word 1's padding and cache swizzle hint are no address bits.
+        const auto buffer = GcnBufferDescriptor({0x56a2da1cu, 0x4014ff03u, 4u, 0x2005f22cu});
+        check(buffer == std::array<std::uint32_t, 4>{0x56a2da1cu, 0x00140003u, 4u, 0x0104022cu | (64u << 12u)}, "GcnBufferDescriptor", "V# has the wrong RDNA words");
 
         const auto sample = decode({(0x3cu << 26u) | (0x20u << 18u) | (0xfu << 8u), 1u | (4u << 8u) | (2u << 16u) | (3u << 21u)});
         check(sample.op == RdnaOpcode::ImageSample && sample.imageDimension == RdnaImageDimension::Dim2D, "image_sample", "not a 2D sample");

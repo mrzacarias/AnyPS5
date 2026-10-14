@@ -1,4 +1,5 @@
 #include "Optimization/ResourceMaterializer.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "Optimization/SrtWalker/SrtFlatSlotClasses.hpp"
 #include "Optimization/ShaderStageInputInfo.hpp"
 #include "RdnaDecoder/RdnaDescriptorFormat.hpp"
@@ -456,6 +457,14 @@ void materializeSnapshot(const IrResourcePlan& plan, const SrtRuntime& runtime, 
     }
     snapshot.buffers.assign(values.begin(), values.begin() + plan.info.buffers.size());
     cursor += plan.info.buffers.size();
+    // GCN (PS4) V#s and T#s are read in the RDNA layout from here on.
+    if (GcnShaderCode()) {
+        for (auto& buffer : snapshot.buffers) {
+            if (buffer.dwordCount != 4u) continue;
+            const auto converted = GcnBufferDescriptor({buffer.dwords[0], buffer.dwords[1], buffer.dwords[2], buffer.dwords[3]});
+            std::copy(converted.begin(), converted.end(), buffer.dwords.begin());
+        }
+    }
 
     snapshot.images.resize(plan.info.images.size());
     tables.assign(plan.info.images.size(), {});
@@ -491,6 +500,7 @@ void materializeSnapshot(const IrResourcePlan& plan, const SrtRuntime& runtime, 
         if (descriptor.dwordCount != 8u) {
             throw std::runtime_error("image descriptor has an invalid width");
         }
+        if (GcnShaderCode() && !nullImageDescriptor(descriptor)) descriptor.dwords = GcnImageDescriptor(descriptor.dwords);
         const auto activity = plan.descriptorSources.size() + i;
         if (activity < activeSources.size() && activeSources[activity] == 0u) {
             descriptor = DescriptorValue{};

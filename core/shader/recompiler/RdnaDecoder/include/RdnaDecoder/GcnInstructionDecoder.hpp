@@ -2,6 +2,7 @@
 #define CORE_SHADER_RECOMPILIER_RDNADECODER_INCLUDE_RDNADECODER_GCNINSTRUCTIONDECODER_HPP
 
 #include "RdnaDecoder/RdnaInstruction.hpp"
+#include <array>
 #include <cstdint>
 #include <span>
 
@@ -16,6 +17,12 @@ void SetGcnShaderCode(bool gcn);
 
 // The RDNA buffer format (IrBufferFormat value) of a GCN data and number format pair.
 [[nodiscard]] std::uint32_t GcnBufferFormat(std::uint32_t dataFormat, std::uint32_t numberFormat);
+// The RDNA image format (IrBufferFormat value) of a GCN image data and number format pair.
+[[nodiscard]] std::uint32_t GcnImageFormat(std::uint32_t dataFormat, std::uint32_t numberFormat);
+
+// GCN buffer and image descriptors in the RDNA layout. An image keeps no GCN tiling: it is linear.
+[[nodiscard]] std::array<std::uint32_t, 4> GcnBufferDescriptor(const std::array<std::uint32_t, 4>& gcn);
+[[nodiscard]] std::array<std::uint32_t, 8> GcnImageDescriptor(const std::array<std::uint32_t, 8>& gcn);
 
 }
 

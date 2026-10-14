@@ -146,6 +146,80 @@ std::uint32_t GcnBufferFormat(std::uint32_t dataFormat, std::uint32_t numberForm
     return format;
 }
 
+std::uint32_t GcnImageFormat(std::uint32_t dataFormat, std::uint32_t numberFormat) {
+    constexpr std::uint32_t Unorm = 0, Snorm = 1, Float = 7, Srgb = 9;
+    if (numberFormat == Srgb) {
+        switch (dataFormat) {
+            case 1: return 128u;   // 8
+            case 3: return 129u;   // 8_8
+            case 10: return 130u;  // 8_8_8_8
+            case 35: return 170u;  // BC1
+            case 36: return 172u;  // BC2
+            case 37: return 174u;  // BC3
+            case 41: return 182u;  // BC7
+            default: break;
+        }
+    } else if (dataFormat >= 1u && dataFormat <= 14u) {
+        return GcnBufferFormat(dataFormat, numberFormat);
+    } else if (numberFormat == Unorm) {
+        switch (dataFormat) {
+            case 16: return 133u;  // 5_6_5
+            case 17: return 134u;  // 1_5_5_5
+            case 18: return 135u;  // 5_5_5_1
+            case 19: return 136u;  // 4_4_4_4
+            case 35: return 169u;  // BC1
+            case 36: return 171u;  // BC2
+            case 37: return 173u;  // BC3
+            case 38: return 175u;  // BC4
+            case 39: return 177u;  // BC5
+            case 40: return 179u;  // BC6, unsigned
+            case 41: return 181u;  // BC7
+            default: break;
+        }
+    } else if (numberFormat == Snorm) {
+        switch (dataFormat) {
+            case 38: return 176u;  // BC4
+            case 39: return 178u;  // BC5
+            case 40: return 180u;  // BC6, signed
+            default: break;
+        }
+    } else if (numberFormat == Float) {
+        switch (dataFormat) {
+            case 34: return 132u;  // 5_9_9_9 shared exponent
+            case 40: return 179u;  // BC6
+            default: break;
+        }
+    }
+    throw std::invalid_argument("GCN image data format " + std::to_string(dataFormat) + " with number format " + std::to_string(numberFormat) + " has no RDNA image format");
+}
+
+std::array<std::uint32_t, 4> GcnBufferDescriptor(const std::array<std::uint32_t, 4>& gcn) {
+    // V# word 1 keeps the address bits 39:32 (7:0) and the stride (29:16), not the cache swizzle hint (bit 30); word 3:
+    // the data (18:15) and number (14:12) formats become one RDNA format (18:12), the GCN element size, ATC, hash, heap
+    // and memory type bits go, and the resource level is 1.
+    if ((gcn[1] >> 31u) != 0u) throw std::invalid_argument("swizzled GCN buffers are unsupported (V# " + hex(gcn[0]) + " " + hex(gcn[1]) + " " + hex(gcn[2]) + " " + hex(gcn[3]) + ")");
+    const auto dataFormat = (gcn[3] >> 15u) & 0xfu;
+    const auto format = dataFormat == 0u ? 0u : GcnBufferFormat(dataFormat, (gcn[3] >> 12u) & 7u);
+    return {gcn[0], gcn[1] & 0x3fff00ffu, gcn[2], (gcn[3] & 0xc0e00fffu) | (format << 12u) | (1u << 24u)};
+}
+
+std::array<std::uint32_t, 8> GcnImageDescriptor(const std::array<std::uint32_t, 8>& gcn) {
+    // GCN T#: address bits 45:40 and the L2 memory type (7:6) in word 1 below the minimum LOD (19:8), width and
+    // height minus one in word 2, data (25:20) and number (29:26) formats in word 1, tiling index
+    // in word 3, depth and pitch in word 4, base and last array slice in word 5. RDNA splits the width over words 1
+    // and 2, puts the format at 28:20 of word 1, the swizzle mode where the tiling index was, the last slice and
+    // base slice in word 4 and the last mip level in word 5.
+    const auto width = gcn[2] & 0x3fffu;
+    const auto height = (gcn[2] >> 14u) & 0x3fffu;
+    const auto format = GcnImageFormat((gcn[1] >> 20u) & 0x3fu, (gcn[1] >> 26u) & 0xfu);
+    // GCN programs turn cube coordinates into a face index themselves (v_cubeid), so a cube is a 2D array of its faces.
+    const auto type = gcn[3] >> 28u == 11u ? 13u : gcn[3] >> 28u;
+    const bool array = type == 12u || type == 13u;
+    const auto depth = array ? (gcn[5] >> 13u) & 0x1fffu : gcn[4] & 0x1fffu;
+    return {gcn[0], (gcn[1] & 0xfff3fu) | (format << 20u) | ((width & 3u) << 30u), (width >> 2u) | (height << 14u) | (1u << 31u), (gcn[3] & 0x000fffffu) | (type << 28u),
+            depth | ((gcn[5] & 0x1fffu) << 16u), ((gcn[3] >> 16u) & 0xfu) << 4u, 0u, 0u};
+}
+
 RdnaInstruction DecodeGcnInstruction(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex) {
     if (wordIndex >= code.size()) {
         throw std::out_of_range("word index is out of the code span bounds");
