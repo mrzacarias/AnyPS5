@@ -18,6 +18,7 @@ constexpr int16_t EvfiltGraphicsCore = -14;
 struct Registration {
     KernelEqueue eq;
     int id;
+    std::uint32_t queue;
 };
 
 std::mutex g_mutex;
@@ -32,17 +33,15 @@ void AgcDriverDeliverEopInterrupt(std::uint32_t queue) {
         registrations = g_registrations;
     }
     for (const auto& registration : registrations) {
-        if (registration.id == static_cast<int>(queue)) {
+        if (registration.queue == queue) {
             EqueueTriggerEvent_nid_postfix(registration.eq, static_cast<uintptr_t>(registration.id), EvfiltGraphicsCore, nullptr);
         }
     }
 }
 
-extern "C" {
-
-int APS5_VABI sceAgcDriverAddEqEvent(KernelEqueue eq, int id, void* udata) {
+static int addEqEvent(const char* function, KernelEqueue eq, int id, std::uint32_t queue, void* udata) {
     if (eq == 0 || !EqueuePin_nid_postfix(eq)) {
-        throw std::runtime_error(std::string(__func__) + ": invalid event queue");
+        throw std::runtime_error(std::string(function) + ": invalid event queue");
     }
     KernelEqueueEvent event{};
     event.event.ident = static_cast<uintptr_t>(id);
@@ -59,13 +58,27 @@ int APS5_VABI sceAgcDriverAddEqEvent(KernelEqueue eq, int id, void* udata) {
     };
     const int result = EqueueAddEvent_nid_postfix(eq, event);
     if (result != EQUEUE_OK) {
-        throw std::runtime_error(std::string(__func__) + ": event queue rejected the event");
+        throw std::runtime_error(std::string(function) + ": event queue rejected the event");
     }
     std::lock_guard lock(g_mutex);
     if (std::none_of(g_registrations.begin(), g_registrations.end(), [&](const Registration& r) { return r.eq == eq && r.id == id; })) {
-        g_registrations.push_back({eq, id});
+        g_registrations.push_back({eq, id, queue});
     }
     return 0;
+}
+
+extern "C" {
+
+int APS5_VABI sceAgcDriverAddEqEvent(KernelEqueue eq, int id, void* udata) {
+    return addEqEvent(__func__, eq, id, static_cast<std::uint32_t>(id), udata);
+}
+
+int AgcDriverAddQueueEqEvent_nid_postfix(KernelEqueue eq, int id, std::uint32_t queue, void* udata) {
+    return addEqEvent(__func__, eq, id, queue, udata);
+}
+
+int AgcDriverDeleteEqEvent_nid_postfix(KernelEqueue eq, int id) {
+    return sceAgcDriverDeleteEqEvent(eq, id);
 }
 
 int APS5_VABI sceAgcDriverDeleteEqEvent(KernelEqueue eq, int id) {

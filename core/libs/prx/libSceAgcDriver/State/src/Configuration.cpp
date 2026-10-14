@@ -43,4 +43,9 @@ int APS5_VABI sceAgcDriverGetTFRing(uintptr_t* base, uint32_t* size) {
  return 0;
 }
 
+std::uintptr_t AgcDriverTessellationFactorRingBase_nid_postfix() {
+ std::lock_guard lock(tessellationFactorRingMutex);
+ return tessellationFactorRing.base;
+}
+
 }
