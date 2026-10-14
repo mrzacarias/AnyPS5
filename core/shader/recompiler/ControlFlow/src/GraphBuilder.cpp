@@ -560,19 +560,22 @@ std::vector<SwappcCall> analyzeSwappcCalls(const RdnaProgram& program, const Swa
             }
             if (returns != 1u || regionEnd < call.targetIndex) regionEnd = InvalidControlFlowId;
         }
-        // After a fetch call, straight-line code that overwrites the whole link pair ends the return address's life:
-        // every later instruction is only reached through that write (PS4 vertex programs reuse s[0:1] this way).
-        std::uint32_t linkDead = InvalidControlFlowId;
-        for (auto index = call.callIndex + 1u; call.fetch && index < program.instructions.size(); ++index) {
-            const auto& instruction = program.instructions[index];
-            if (IsDirectBranchOpcode(instruction.op) || instruction.op == RdnaOpcode::SSetpcB64 || instruction.op == RdnaOpcode::SSwappcB64 || instruction.op == RdnaOpcode::SCallB64) break;
-            if (!touchesLinkRegister(instruction, call.linkRegister)) continue;
-            if (onlyWritesLinkRegister(instruction, call.linkRegister) && writesScalar(instruction, call.linkRegister) && writesScalar(instruction, call.linkRegister + 1u)) linkDead = index;
-            break;
+        // A fetch call returns inside the fetch shader. Its translation still leaves the return address in the link pair,
+        // as the hardware does, so later code may read or reuse the pair (PS4 vertex programs reload s[0:1]); it only must
+        // not return through it.
+        if (call.fetch) {
+            for (auto index = call.callIndex + 1u; index < program.instructions.size(); ++index) {
+                const auto& instruction = program.instructions[index];
+                if (instruction.op == RdnaOpcode::SSetpcB64 && isScalar(instruction.source0, call.linkRegister)) {
+                    throw std::invalid_argument("unclosable s_swappc_b64 fetch-shader call at program counter " + toHexString(program.instructions[call.callIndex].programCounter) +
+                        ": its s_setpc_b64 return must live in the fetch-shader code");
+                }
+            }
+            continue;
         }
         std::uint32_t returnIndex = InvalidControlFlowId;
         for (std::uint32_t index = 0; index < program.instructions.size(); ++index) {
-            if (index == call.callIndex || index >= linkDead) {
+            if (index == call.callIndex) {
                 continue;
             }
             const auto& instruction = program.instructions[index];
@@ -588,13 +591,6 @@ std::vector<SwappcCall> analyzeSwappcCalls(const RdnaProgram& program, const Swa
             if (touchesLinkRegister(instruction, call.linkRegister) && !(outsideRegion && onlyWritesLinkRegister(instruction, call.linkRegister))) {
                 throw escapeError(call, instruction);
             }
-        }
-        if (call.fetch) {
-            if (returnIndex != InvalidControlFlowId) {
-                throw std::invalid_argument("unclosable s_swappc_b64 fetch-shader call at program counter " + toHexString(program.instructions[call.callIndex].programCounter) +
-                    ": its s_setpc_b64 return must live in the fetch-shader code");
-            }
-            continue;
         }
         if (returnIndex == InvalidControlFlowId) {
             throw std::invalid_argument("unclosable scalar call/return pairing at program counter " + toHexString(program.instructions[call.callIndex].programCounter) +

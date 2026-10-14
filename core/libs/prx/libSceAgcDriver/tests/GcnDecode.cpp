@@ -132,6 +132,18 @@ int main() {
         const auto decoded = RdnaInstructionDecoder{}.Decode(entry);
         const SwappcInfo swappc{true, 0u, 16u};
         check(GraphBuilder{}.Build(decoded, &swappc).hasFetchCall, "PS4 fetch call", "the s_swappc_b64 is not a fetch-shader call");
+        // Another entry rewrites only s0 after the call and never reads the pair.
+        const std::vector<std::uint32_t> half{0xbeeb03ffu, 0x23u, 0xbefc03ffu, 0x93d1aa12u, 0xbf960000u, 0xbe802100u, 0x080012f2u, 0xc200050du, 0xbf8c007fu, EndProgram};
+        check(GraphBuilder{}.Build(RdnaInstructionDecoder{}.Decode(half), &swappc).hasFetchCall, "PS4 fetch call, half rewritten", "the s_swappc_b64 is not a fetch-shader call");
+        // The fetch shader returns by itself; the program must not return through the link.
+        const std::vector<std::uint32_t> read{0xbe802100u, 0xbe802000u, EndProgram};
+        bool refused = false;
+        try {
+            static_cast<void>(GraphBuilder{}.Build(RdnaInstructionDecoder{}.Decode(read), &swappc));
+        } catch (const std::invalid_argument&) {
+            refused = true;
+        }
+        check(refused, "PS4 fetch call, link return", "a return through the link register after the call is accepted");
     } catch (const std::exception& error) {
         std::fprintf(stderr, "PS4 fetch call: %s\n", error.what());
         ++failures;
