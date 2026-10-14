@@ -4,6 +4,7 @@
 #include <elfpatcher/general/GuestModuleWriter.hpp>
 #include <codegen/IAmd64OnlyConverter.hpp>
 #include <domain/ImportModule.hpp>
+#include <domain/Ps4Modules.hpp>
 #include <io/NativePath.hpp>
 #include <io/BufferUtils.hpp>
 #include <algorithm>
@@ -281,6 +282,9 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
     for (const auto& name : neededNames) addHost(name);
     for (const auto& image : images) for (const auto& dependency : image.Dependencies) addHost(dependency);
     if (uniqueHosts.contains("libSceLibcInternal.prx") && uniqueHosts.insert("libc.prx").second) hostLibraries.push_back("libc.prx");
+    if (std::any_of(images.begin(), images.end(), [](const GuestImage& image) { return std::any_of(image.Headers.begin(), image.Headers.end(), [](const auto& header) { return header.Type == Domain::PtSceDynlibData; }); }))
+        for (const auto& [ps4Module, provider] : Domain::Ps4ProviderModules)
+            if (uniqueHosts.contains(std::string(ps4Module))) addHost(std::string(provider));
     dynamic.DynamicSegmentData.clear();
     const auto addNeeded = [&](const std::string& name) {
         Io::AppendU64(dynamic.DynamicSegmentData, 1);

@@ -10,18 +10,10 @@
 #include <cstring>
 #include <limits>
 #include <tuple>
-#include <array>
-#include <string_view>
-#include <utility>
 #include <domain/ImportModule.hpp>
+#include <domain/Ps4Modules.hpp>
 
 namespace Relinker {
-
-namespace {
-
-constexpr std::array<std::pair<std::string_view, std::string_view>, 2> Ps4NativeModules{{{"libSceAjm.prx", "libSceAjm.native.prx"}, {"libSceSsl2.prx", "libSceSsl.prx"}}};
-
-}
 
 using namespace Elfpatcher;
 
@@ -359,7 +351,7 @@ RelinkResult RelinkerPipeline::Relink(const std::vector<std::uint8_t>& sourceElf
     }
     auto outputLibraries = neededLibraries;
     if (std::any_of(programHeaders.begin(), programHeaders.end(), [](const ProgramHeader& ph) { return ph.Type == PT_SCE_DYNLIBDATA; })) {
-        for (const auto& [ps4Module, native] : Ps4NativeModules)
+        for (const auto& [ps4Module, native] : Domain::Ps4ProviderModules)
             if (std::find(outputLibraries.begin(), outputLibraries.end(), ps4Module) != outputLibraries.end() && std::find(outputLibraries.begin(), outputLibraries.end(), native) == outputLibraries.end()) outputLibraries.emplace_back(native);
     }
     auto dynSection = dynamicSectionBuilder->BuildDynamicSection(dynamicRefs, outputLibraries, dynJmpRelOffset, pltCount);
