@@ -10,9 +10,18 @@
 #include <cstring>
 #include <limits>
 #include <tuple>
+#include <array>
+#include <string_view>
+#include <utility>
 #include <domain/ImportModule.hpp>
 
 namespace Relinker {
+
+namespace {
+
+constexpr std::array<std::pair<std::string_view, std::string_view>, 1> Ps4NativeModules{{{"libSceAjm.prx", "libSceAjm.native.prx"}}};
+
+}
 
 using namespace Elfpatcher;
 
@@ -348,7 +357,12 @@ RelinkResult RelinkerPipeline::Relink(const std::vector<std::uint8_t>& sourceElf
         { std::ostringstream message; message << "PLT compaction: " << pltCount << " -> " << compacted.SlotCount << "\n"; progress.Message(message.str()); }
         pltCount = compacted.SlotCount;
     }
-    auto dynSection = dynamicSectionBuilder->BuildDynamicSection(dynamicRefs, neededLibraries, dynJmpRelOffset, pltCount);
+    auto outputLibraries = neededLibraries;
+    if (std::any_of(programHeaders.begin(), programHeaders.end(), [](const ProgramHeader& ph) { return ph.Type == PT_SCE_DYNLIBDATA; })) {
+        for (const auto& [ps4Module, native] : Ps4NativeModules)
+            if (std::find(outputLibraries.begin(), outputLibraries.end(), ps4Module) != outputLibraries.end() && std::find(outputLibraries.begin(), outputLibraries.end(), native) == outputLibraries.end()) outputLibraries.emplace_back(native);
+    }
+    auto dynSection = dynamicSectionBuilder->BuildDynamicSection(dynamicRefs, outputLibraries, dynJmpRelOffset, pltCount);
     for (const auto& ref : dynamicRefs) {
         if (!ref.Library.empty()) continue;
         if (auto declared = Domain::DeclaredImportModule(ref.Nid, importModules); !declared.empty()) dynSection.UnmatchedImportModules.insert(std::move(declared));
