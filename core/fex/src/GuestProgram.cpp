@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 #include <string_view>
 
@@ -21,6 +22,23 @@ std::uint64_t AlignUp(std::uint64_t value, std::uint64_t alignment) {
 }
 
 GuestProgram* loadedProgram = nullptr;
+
+bool Ps4Executable(const GuestImage& image) {
+    const auto* headers = static_cast<const std::uint8_t*>(image.ProgramHeaders());
+    for (std::size_t index = 0; index < image.ProgramHeaderCount(); ++index) {
+        const auto* header = headers + index * GuestImage::ProgramHeaderSize;
+        std::uint32_t type = 0;
+        std::uint64_t address = 0, fileSize = 0;
+        std::memcpy(&type, header, sizeof(type));
+        std::memcpy(&address, header + 16, sizeof(address));
+        std::memcpy(&fileSize, header + 32, sizeof(fileSize));
+        if (type != 0x61000001 || fileSize < 0x18) continue;
+        std::uint32_t sdkVersionHigh = 0;
+        std::memcpy(&sdkVersionHigh, reinterpret_cast<const void*>(image.Base() + address + 0x14), sizeof(sdkVersionHigh));
+        return sdkVersionHigh == 0;
+    }
+    return false;
+}
 
 void* OpenGuestModule(const char* path) {
     if (path == nullptr) return loadedProgram->Images().empty() ? nullptr : loadedProgram->Images().front().get();
@@ -90,6 +108,9 @@ GuestProgram::GuestProgram(const std::filesystem::path& executable, Bridge& brid
         deferred[index] = false;
         pending.insert(pending.end(), providers[index].begin(), providers[index].end());
     }
+    if (Ps4Executable(*images.front()))
+        for (std::size_t index = 1; index < images.size(); ++index)
+            if (images[index]->Path().parent_path().filename() != "sce_module") deferred[index] = true;
     for (std::size_t index = 1; index < images.size(); ++index)
         if (deferred[index]) std::fprintf(stderr, "[aps5-fex] %s starts when the title loads it\n", images[index]->Path().filename().c_str());
     bridge.Connect();
