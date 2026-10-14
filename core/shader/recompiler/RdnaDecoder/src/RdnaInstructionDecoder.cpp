@@ -1,4 +1,5 @@
 #include "RdnaDecoder/RdnaInstructionDecoder.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "RdnaDecoder/RdnaExportOpDecoder.hpp"
 #include "RdnaDecoder/RdnaImageOpDecoder.hpp"
 #include "RdnaDecoder/RdnaMemoryOpDecoder.hpp"
@@ -90,6 +91,13 @@ RdnaInstructionFamily GetRdnaInstructionFamily(std::uint32_t word) {
 }
 
 RdnaInstruction DecodeRdnaInstruction(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex) {
+    if (GcnShaderCode()) {
+        return DecodeGcnInstruction(programCounter, code, wordIndex);
+    }
+    return DecodeRdnaEncoding(programCounter, code, wordIndex);
+}
+
+RdnaInstruction DecodeRdnaEncoding(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex) {
     if (wordIndex >= code.size()) {
         throw std::out_of_range("word index is out of the code span bounds");
     }

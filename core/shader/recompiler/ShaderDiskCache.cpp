@@ -1,4 +1,5 @@
 #include "ShaderDiskCache.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "CacheKey.hpp"
 #include "ShaderCacheDirectory.hpp"
 #include "ThreadOwned.hpp"
@@ -926,6 +927,7 @@ void BuildKey(const RecompileRequest& request, std::uint32_t hostSubgroupSize, s
     RecompileCacheKey::Build(request, memoryKey);
     writer.Values(std::span<const std::uint64_t>(memoryKey));
     writer.Values(request.shader.code);
+    writer.Value(GcnShaderCode());
     writer.Value(hostSubgroupSize);
     writer.Value(request.layout.descriptorSet);
     writer.Value(request.layout.firstBinding);

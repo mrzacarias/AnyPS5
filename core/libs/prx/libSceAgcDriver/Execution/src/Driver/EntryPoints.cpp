@@ -1,5 +1,6 @@
 #include "prx/libSceAgcDriver/Execution/include/ThreadPriority.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include <mutex>
 
 namespace AgcDriver {
@@ -62,6 +63,10 @@ extern "C" void AgcDriverRaiseWorkerThreadPriority_nid_postfix(const char* role)
 
 extern "C" void AgcDriverSubmit_nid_postfix(const Packet* packet, std::uint32_t queue) {
     AgcDriver::Submit(packet, queue);
+}
+
+extern "C" void AgcDriverUseGcnShaders_nid_postfix() {
+    ShaderRecompiler::SetGcnShaderCode(true);
 }
 
 extern "C" void AgcDriverWaitIdle_nid_postfix() try {

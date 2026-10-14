@@ -34,6 +34,7 @@ void checkBuffers(std::uint32_t count, std::uint32_t* const* dcbAddresses, const
 }
 
 void submit(std::uint32_t count, std::uint32_t* const* dcbAddresses, const std::uint32_t* dcbBytes) {
+    AgcDriverUseGcnShaders_nid_postfix();
     for (std::uint32_t index = 0; index < count; ++index) {
         const Packet packet{dcbAddresses[index], dcbBytes[index] / static_cast<std::uint32_t>(sizeof(std::uint32_t)), 0, {}};
         AgcDriverSubmit_nid_postfix(&packet, 0);

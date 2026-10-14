@@ -86,6 +86,8 @@ void TranslationContext::emitCompareResult(const RdnaInstruction& inst, IrU1 val
     }
     IrValue& masked = ir.LogicalAnd(ir.GetExec(), value.Value());
     if (cmpx) {
+        // GCN v_cmpx also writes its scalar destination; the GCN decoder names it as the second destination.
+        if (inst.destination2.kind != RdnaOperandKind::Unknown) writeMask(inst.destination2, IrU1(masked));
         const std::array<IrU32, 2> mask = ballotMask(IrU1(masked));
         ir.SetExec(masked);
         ir.SetExecLo(mask[0].Value());

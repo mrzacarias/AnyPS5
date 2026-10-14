@@ -18,6 +18,8 @@ private:
 
 RdnaInstructionFamily GetRdnaInstructionFamily(std::uint32_t word);
 RdnaInstruction DecodeRdnaInstruction(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex);
+// Decodes RDNA words whether or not the shader code is GCN.
+RdnaInstruction DecodeRdnaEncoding(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex);
 RdnaProgram DecodeRdnaFrontProgram(std::span<const std::uint32_t> front);
 void DecodeRdnaProgram(std::span<const std::uint32_t> code, RdnaProgram& program);
 RdnaOperand DecodeRdnaScalarSource(std::uint32_t code, std::uint32_t programCounter);
