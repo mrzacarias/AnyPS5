@@ -7,6 +7,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/TextureFormat.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libc/include/General.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include <algorithm>
 #include <bit>
 #include <bitset>
@@ -605,6 +606,11 @@ ShaderStages DecodeShaderStages(const QueueState& queue, bool vertexWorkgroup) {
         prefix << "VGT_SHADER_STAGES_EN=0x" << std::hex << value << ": " << reason;
         Require(false, prefix.str());
     };
+    if (ShaderRecompiler::GcnShaderCode()) {
+        // PS4 (GFX7) draws run their vertex program in the VS hardware stage, in waves of 64 like every GCN program.
+        validate(value == 0, "PS4 stages other than a lone vertex stage are unsupported");
+        return {ShaderPath::Vertex, value, 64u, 64u, {}, {}};
+    }
     validate((value & 0xfc000000u) == 0, "reserved stage bits are set");
     validate((value & 3u) != 3u && ((value >> 3u) & 3u) != 3u && ((value >> 6u) & 3u) != 3u, "reserved LS_EN, ES_EN or VS_EN encoding");
     const auto primitive = read(queue.userConfig, 0x242, RegisterBank::UserConfig);

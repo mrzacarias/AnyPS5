@@ -174,6 +174,7 @@ set(agcDriverSources
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/SubgroupClock.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/ShaderDeviceProfile.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/Pm4.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/Ps4Registers.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/VulkanDevice.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/AspectFit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/PresentationScaler.cpp
@@ -1019,6 +1020,18 @@ if(BUILD_TESTING)
         set_tests_properties(agc_host_import_retire PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
+endif()
+
+add_test_executable(agc_ps4_registers_tests EXCLUDE_FROM_ALL
+        tests/Ps4Registers.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Execution/src/Ps4Registers.cpp
+)
+target_include_directories(agc_ps4_registers_tests PRIVATE ${LIBS_INCLUDE_DIR})
+set_target_properties(agc_ps4_registers_tests PROPERTIES CXX_EXTENSIONS OFF)
+configure_windows_unwind(agc_ps4_registers_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_ps4_registers_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
+    add_test(NAME agc_ps4_registers COMMAND agc_ps4_registers_tests)
 endif()
 
 add_test_executable(agc_driver_pm4_tests EXCLUDE_FROM_ALL

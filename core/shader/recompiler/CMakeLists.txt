@@ -247,6 +247,13 @@ function(add_shader_recompiler target runtimeTarget)
             RuntimeAbi::RequireVersion
             RuntimeAbi::HeapCapacity
             SetDebugProbeActive
+            DecodeRdnaInstruction
+            GcnBufferFormat
+            GcnShaderCode
+            RdnaInstructionFamily
+            RdnaInstructionToString
+            RdnaOpcode
+            RdnaOperandKind
             SetGcnShaderCode
             ShaderCacheDirectory
             SrgbDecodeBit

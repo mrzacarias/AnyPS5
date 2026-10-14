@@ -1,4 +1,5 @@
 #include "Translation/InstructionTranslator.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "Recompiler.hpp"
 #include "Translation/DispatchInstructions.hpp"
 #include "Translation/TranslationContext.hpp"
@@ -373,6 +374,12 @@ void emitEntryPrologue(IrProgram& program, IrBlock& entryBlock, const TranslateO
             IrValue& x = entryIr.Emit(IrOpcode::ConvertU32F32, IrType::U32, {&entryIr.BitCastF32(builtin(StageInputKind::FragCoord, 0u))});
             IrValue& y = entryIr.Emit(IrOpcode::ConvertU32F32, IrType::U32, {&entryIr.BitCastF32(builtin(StageInputKind::FragCoord, 1u))});
             setVector(static_cast<VectorReg>(vgpr(PixelInput::PositionFixedPoint)), entryIr.BitwiseOr(entryIr.BitwiseAnd(x, entryIr.Constant(0xffffu)), entryIr.ShiftLeftLogical(y, entryIr.Constant(16u))));
+        }
+    } else if (options.stage == ShaderStageKind::Vertex && GcnShaderCode()) {
+        // A GCN VS gets the vertex index in v0 and the instance index in v1 to v3 (divided by the step rates 0 and 1, then plain).
+        setVector(static_cast<VectorReg>(0), drawIndex(StageInputKind::VertexIndex));
+        for (std::uint32_t reg = 1u; reg < 4u; reg++) {
+            setVector(static_cast<VectorReg>(reg), drawIndex(StageInputKind::InstanceIndex));
         }
     } else if (options.stage == ShaderStageKind::Vertex) {
         if (options.userDataBaseRegister >= 8u) {

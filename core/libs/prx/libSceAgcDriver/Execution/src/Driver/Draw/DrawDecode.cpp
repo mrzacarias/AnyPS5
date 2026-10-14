@@ -2,6 +2,7 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Shaders/ShaderRegistry.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Diagnostics.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 
 namespace AgcDriver::DriverDetail {
 
@@ -106,6 +107,10 @@ void DecodeGraphicsPrograms(DrawDecode& decoded, const QueueState& queue, const 
             append(0xc8, type, Stage::Mesh, 0x8b, 0x8c, Role::Main);
             InitializeMerged(queue, programs.back(), 0x82, type == 4, staticAbi);
             if (type == 4) append(0x88, 6, Stage::Mesh, 0x8b, 0x8c, Role::GeometryBack);
+        } else if (ShaderRecompiler::GcnShaderCode()) {
+            // A PS4 vertex program sits in the VS registers and reads its user data from s0.
+            append(0x048, 2, Stage::Vertex, 0x04b, 0x04c, Role::Main);
+            programs.back().firstUserSgpr = 0;
         } else {
             append(0xc8, 2, Stage::Vertex, 0x8b, 0x8c, Role::Main);
         }
