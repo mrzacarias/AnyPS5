@@ -19,7 +19,7 @@ namespace Relinker {
 
 namespace {
 
-constexpr std::array<std::pair<std::string_view, std::string_view>, 1> Ps4NativeModules{{{"libSceAjm.prx", "libSceAjm.native.prx"}}};
+constexpr std::array<std::pair<std::string_view, std::string_view>, 2> Ps4NativeModules{{{"libSceAjm.prx", "libSceAjm.native.prx"}, {"libSceSsl2.prx", "libSceSsl.prx"}}};
 
 }
 
