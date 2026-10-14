@@ -30,7 +30,7 @@ std::uint64_t baselineRegisterStateKey(const QueueState& queue, bool allUserWord
         const auto count = ((resources->second >> 1u) & 0x1fu) | (((resources->second >> 27u) & 1u) << 5u);
         return base + std::min(count, 32u);
     };
-    const std::array<std::pair<std::uint32_t, std::uint32_t>, 3> users{{{0x00cu, userEnd(0x00cu)}, {0x08cu, userEnd(0x08cu)}, {0x10cu, userEnd(0x10cu)}}};
+    const std::array<std::pair<std::uint32_t, std::uint32_t>, 4> users{{{0x00cu, userEnd(0x00cu)}, {0x04cu, userEnd(0x04cu)}, {0x08cu, userEnd(0x08cu)}, {0x10cu, userEnd(0x10cu)}}};
     const auto unread = [&](std::uint32_t offset) {
         return std::any_of(users.begin(), users.end(), [&](const auto& user) { return offset >= user.second && offset < user.first + 32u; });
     };
@@ -125,12 +125,30 @@ void testFingerprints() {
     check(registers.Fingerprint(low) == lowHash && registers.Fingerprint(high) == registers.RecomputeFingerprint(*high), "projection switch lost a masked write");
 }
 
+// A PS4 vertex program keeps its address at 0x48 and its user words at 0x4c (count in RSRC2 at 0x4b): draws
+// that differ only there decode differently.
+void testPs4VertexRegisters() {
+    QueueState queue;
+    queue.shader[0x48] = 0x84bcb100u >> 8u;
+    queue.shader[0x4b] = 14u << 1u;
+    for (std::uint32_t word = 0; word < 14; ++word) queue.shader[0x4c + word] = 0x1000u + word;
+    const auto key = RegisterStateKey(queue);
+    queue.shader[0x4e] = 0xa2b50400u;
+    const auto userKey = RegisterStateKey(queue);
+    check(userKey != key, "a PS4 vertex user word did not change the draw key");
+    queue.shader[0x48] = (0x84bcb100u >> 8u) + 2u;
+    check(RegisterStateKey(queue) != userKey, "the PS4 vertex program address did not change the draw key");
+    queue.shader[0x48] = 0x84bcb100u >> 8u;
+    queue.shader[0x5c] = 7u;
+    check(RegisterStateKey(queue) == userKey, "a PS4 vertex user word past the RSRC2 count changed the draw key");
+}
 
 }
 
 int main() {
     try {
         testFingerprints();
+        testPs4VertexRegisters();
         std::puts("Register fingerprint dependencies and mutations passed");
         return 0;
     } catch (const std::exception& error) {
