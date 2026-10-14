@@ -99,8 +99,10 @@ struct Port {
     SDL_AudioSpec spec = {};
 };
 
-static std::mutex g_mutex;
-static std::mutex g_outputMutex;
+// Never destroyed: a title's audio threads keep outputting while the process exits (its window closed), after static
+// destruction would have destroyed them.
+static std::mutex& g_mutex = *new std::mutex;
+static std::mutex& g_outputMutex = *new std::mutex;
 static Port g_ports[PORTS_MAX];
 static bool g_sdlInitialized = false;
 
