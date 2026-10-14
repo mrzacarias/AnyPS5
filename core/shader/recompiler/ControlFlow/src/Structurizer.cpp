@@ -1751,7 +1751,10 @@ void Structurizer::canonicalizeNaturalLoops(ControlFlowGraph& graph, bool routeL
             });
             const auto& header = graph.FindBlock(loop.headerBlock);
             const bool semanticSelfLoop = latches.size() == 1u && latches.front() == header.id && header.instructionBegin != header.instructionEnd;
-            if (latches.size() <= 1u && !latchInInnerLoop && !semanticSelfLoop) {
+            // A body that branches back to its header unconditionally (a while loop) would be the loop's continue
+            // construct, whose loop-carried values SPIRV-Cross (MoltenVK) drops: it gets a continue block of its own.
+            const bool bodyLatch = latches.size() == 1u && latches.front() != header.id && graph.FindBlock(latches.front()).terminator.kind == TerminatorKind::Branch && graph.FindBlock(latches.front()).instructionBegin != graph.FindBlock(latches.front()).instructionEnd;
+            if (latches.size() <= 1u && !latchInInnerLoop && !semanticSelfLoop && !bodyLatch) {
                 continue;
             }
 

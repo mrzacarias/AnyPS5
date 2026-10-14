@@ -323,6 +323,22 @@ int main() {
         requireStructuredLoop({{1, 3}, {2, 4}, {3, 1}, {4}, {}}, "a loop whose latch exits into a block the branch before the loop also reaches");
         requireStructuredLoop({{1, 2}, {3, 2}, {4}, {4, 1}, {}}, "a loop whose header exits into a block the branch before the loop also reaches");
         requireStructuredLoop({{1, 2}, {4}, {3, 1}, {4, 2}, {}}, "a loop whose header exits into a block the branch before the loop reaches first");
+        // A while loop whose body branches back unconditionally: the body would be the loop's continue construct, whose
+        // loop-carried values SPIRV-Cross (MoltenVK) drops, so the loop gets an empty continue block of its own.
+        auto whileLoop = makeGraph({{1}, {3, 2}, {1}, {}});
+        Structurizer{}.Structurize(whileLoop);
+        requireStructuredBranches(whileLoop, "a while loop");
+        const auto loopHeader = std::find_if(whileLoop.blocks.begin(), whileLoop.blocks.end(), [](const BasicBlock& block) { return block.terminator.loopHeader; });
+        if (loopHeader == whileLoop.blocks.end()) {
+            std::fprintf(stderr, "a while loop has no loop header\n");
+            return 1;
+        }
+        const auto& loopContinue = whileLoop.FindBlock(loopHeader->terminator.continueBlock);
+        const auto loopBody = std::find_if(whileLoop.blocks.begin(), whileLoop.blocks.end(), [](const BasicBlock& block) { return block.instructionBegin == 4u && block.instructionEnd == 6u; });
+        if (loopContinue.instructionBegin != loopContinue.instructionEnd || loopBody == whileLoop.blocks.end() || loopBody->successors != std::vector<std::uint32_t>{loopContinue.id}) {
+            std::fprintf(stderr, "a while loop's body is its continue block %u\n", loopContinue.id);
+            return 1;
+        }
         auto earlyReturn = makeGraph({{2, 1}, {4, 2}, {3, 5}, {5}, {}, {}});
         Structurizer{}.Structurize(earlyReturn);
         requireExactPostDominators(earlyReturn, "an early return inside a selection that joins its parent's merge");
