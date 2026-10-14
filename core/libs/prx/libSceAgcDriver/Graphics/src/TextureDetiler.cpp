@@ -59,7 +59,8 @@ std::uint32_t BlockBytesFor(TextureTileMode tileMode) {
         case TextureTileMode::kPs4Display1D:
         case TextureTileMode::kPs4Display2D:
         case TextureTileMode::kPs4Thin1D:
-        case TextureTileMode::kPs4Thin2D: return 0u;
+        case TextureTileMode::kPs4Thin2D:
+        case TextureTileMode::kPs4Thick1D: return 0u;
     }
     throw std::runtime_error("AGC graphics: TextureDetiler encountered an unknown tile mode");
 }
@@ -148,7 +149,15 @@ VkPipeline TextureDetiler::pipeline(TextureTileMode tileMode, std::uint32_t elem
     // Constants 0-3 select element size, block size, addressing family and direction; 4-19 carry the
     // per-bit XOR equation for the equation family (2); 20-21 override the block extent in elements.
     std::array<std::uint32_t, 22> values{elementBytes, BlockBytesFor(tileMode), tileMode == TextureTileMode::kLinear ? 0u : 1u, retile ? 1u : 0u};
-    if (thick) {
+    if (IsPs4TileMode(tileMode)) {
+        // A PS4 thick micro tile's equation reads the slice too; its slab of four slices is the dispatch's base.
+        const auto block = Ps4Tiling(tileMode, elementBytes);
+        values[1] = block.bytes;
+        values[2] = 2u;
+        std::copy(block.equation.begin(), block.equation.end(), values.begin() + 4);
+        values[20] = block.width;
+        values[21] = block.height;
+    } else if (thick) {
         const auto thickMode = tileMode == TextureTileMode::kStandard4KB ? 0x105u : tileMode == TextureTileMode::kStandard64KB ? 0x109u : tileMode == TextureTileMode::kS64KBX ? 0x119u : tileMode == TextureTileMode::kD64KBX ? 0x11au : 0u;
         Require(thickMode != 0, "3D textures are only detiled thick from SW_4KB_S, SW_64KB_S, SW_64KB_S_X or SW_64KB_D_X");
         const auto* equation = FindTextureSwizzleEquation(thickMode, elementBytes);
@@ -158,13 +167,6 @@ VkPipeline TextureDetiler::pipeline(TextureTileMode tileMode, std::uint32_t elem
         const auto extent = ThickBlockExtent(tileMode, elementBytes);
         values[20] = extent[0];
         values[21] = extent[1];
-    } else if (IsPs4TileMode(tileMode)) {
-        const auto block = Ps4Tiling(tileMode, elementBytes);
-        values[1] = block.bytes;
-        values[2] = 2u;
-        std::copy(block.equation.begin(), block.equation.end(), values.begin() + 4);
-        values[20] = block.width;
-        values[21] = block.height;
     } else if (const auto mode = EquationSwizzleMode(tileMode); mode != 0) {
         const auto* equation = FindTextureSwizzleEquation(mode, elementBytes);
         if (equation == nullptr) Require(false, "no swizzle equation for tile mode " + std::to_string(mode) + " at " + std::to_string(elementBytes) + " bytes per element");

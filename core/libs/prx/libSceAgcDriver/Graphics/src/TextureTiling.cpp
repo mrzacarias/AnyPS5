@@ -62,7 +62,8 @@ BlockLayout GetBlockLayout(TextureTileMode tileMode, std::uint32_t bytesPerEleme
         case TextureTileMode::kPs4Display1D:
         case TextureTileMode::kPs4Display2D:
         case TextureTileMode::kPs4Thin1D:
-        case TextureTileMode::kPs4Thin2D: {
+        case TextureTileMode::kPs4Thin2D:
+        case TextureTileMode::kPs4Thick1D: {
             const auto block = Ps4Tiling(tileMode, bytesPerElement);
             return {block.bytes, block.width, block.height};
         }
@@ -112,7 +113,8 @@ bool GetMipTailLayout(TextureTileMode tileMode, const BlockLayout& block, std::u
         case TextureTileMode::kPs4Display1D:
         case TextureTileMode::kPs4Display2D:
         case TextureTileMode::kPs4Thin1D:
-        case TextureTileMode::kPs4Thin2D: return false;
+        case TextureTileMode::kPs4Thin2D:
+        case TextureTileMode::kPs4Thick1D: return false;
         case TextureTileMode::kStandard4KB:
         case TextureTileMode::kD4KB:
         case TextureTileMode::kS4KBX:
@@ -310,6 +312,7 @@ std::array<std::uint32_t, 3> ThickBlockExtent(TextureTileMode tileMode, std::uin
         case TextureTileMode::kStandard64KB:
         case TextureTileMode::kS64KBX:
         case TextureTileMode::kD64KBX: return {1u << thick64KB[index][0], 1u << thick64KB[index][1], 1u << thick64KB[index][2]};
+        case TextureTileMode::kPs4Thick1D: return {8u, 8u, 4u};
         default: throw std::runtime_error("AGC graphics: thick 3D textures are only supported in SW_4KB_S, SW_64KB_S, SW_64KB_S_X and SW_64KB_D_X, not in swizzle mode " + std::to_string(EquationSwizzleMode(tileMode)) + " at " + std::to_string(bytesPerElement) + " bytes per element");
     }
 }
@@ -363,8 +366,10 @@ ThickLayout ComputeThickLayout(TextureTileMode tileMode, std::uint32_t format, s
     std::uint32_t maxTailLevels = 0;
     auto firstTailLevel = mipCount;
     if (tileMode != TextureTileMode::kLinear) {
+        // A PS4 thick micro tile; GCN keeps the levels of a 3D texture whole, which this layout does not model.
+        Require(tileMode != TextureTileMode::kPs4Thick1D || mipCount == 1u, "AGC graphics: mipmapped PS4 3D textures are not implemented");
         block = ThickBlockExtent(tileMode, bytesPerElement);
-        blockBytes = tileMode == TextureTileMode::kStandard4KB ? 4096u : 65536u;
+        blockBytes = tileMode == TextureTileMode::kStandard4KB ? 4096u : tileMode == TextureTileMode::kPs4Thick1D ? 256u * bytesPerElement : 65536u;
         const auto log2BlockBytes = static_cast<std::uint32_t>(std::countr_zero(blockBytes));
         const auto tailWidth = log2BlockBytes % 3u == 1u ? block[0] >> 1u : block[0];
         const auto tailHeight = log2BlockBytes % 3u == 0u ? block[1] >> 1u : block[1];
@@ -430,7 +435,12 @@ ThickLayout ComputeThickLayout(TextureTileMode tileMode, std::uint32_t format, s
 
 SurfaceGeometry DescribeSurface(const GuestTextureResource& descriptor) {
     SurfaceGeometry geometry;
-    if (descriptor.dimension == TextureDimension::k3D && (descriptor.tileMode == TextureTileMode::kZ64KBX || descriptor.tileMode == TextureTileMode::kR64KBX)) {
+    // A PS4 3D texture in a thin tiling is a stack of slices, each 1D-tiled; GCN rotates the banks of each slice of a
+    // 2D-tiled one, which is not modeled.
+    const bool ps4Slices = descriptor.dimension == TextureDimension::k3D && IsPs4TileMode(descriptor.tileMode) && descriptor.tileMode != TextureTileMode::kPs4Thick1D;
+    Require(!ps4Slices || (!IsPs4MacroTileMode(descriptor.tileMode) && descriptor.mipCount == 1u), "AGC graphics: 2D-tiled or mipmapped PS4 3D textures are not implemented");
+    Require(descriptor.dimension == TextureDimension::k3D || descriptor.tileMode != TextureTileMode::kPs4Thick1D, "AGC graphics: PS4 thick tiling is only implemented for 3D textures");
+    if (descriptor.dimension == TextureDimension::k3D && (descriptor.tileMode == TextureTileMode::kZ64KBX || descriptor.tileMode == TextureTileMode::kR64KBX || ps4Slices)) {
         const auto depth = descriptor.depthOrLastArray + 1u;
         geometry.mips = ComputeMipLayout(descriptor.tileMode, descriptor.format, descriptor.width, descriptor.height, descriptor.mipCount);
         geometry.layers = depth;

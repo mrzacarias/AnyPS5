@@ -47,6 +47,18 @@ int main() {
         std::fprintf(stderr, "thin 1D offsets are wrong\n");
         ++failures;
     }
+    // Thick 1D: 8x8x4 micro tiles, 32 bpp elements x0 y0 x1 z0 y1 z1 x2 y2 (addrlib's thick element order).
+    const auto thick = Ps4Tiling(TextureTileMode::kPs4Thick1D, 4u);
+    const auto thickOffset = [&](std::uint32_t x, std::uint32_t y, std::uint32_t z) {
+        std::uint32_t at = 0;
+        const auto coordinates = (x & 0xfffu) | ((y << 12u) & 0xfff000u) | (z << 24u);
+        for (std::uint32_t bit = 0; bit < 16u; ++bit) at |= (std::popcount(coordinates & thick.equation[bit]) & 1u) << bit;
+        return at;
+    };
+    if (thick.bytes != 1024u || thick.width != 8u || thick.height != 8u || thickOffset(1u, 0u, 1u) != 9u * 4u || thickOffset(0u, 0u, 2u) != 32u * 4u || thickOffset(4u, 4u, 3u) != (64u + 128u + 8u + 32u) * 4u) {
+        std::fprintf(stderr, "thick 1D offsets are wrong\n");
+        ++failures;
+    }
     // Every 2D macro tile is a permutation of its bytes' elements.
     for (std::uint32_t bytes = 1; bytes <= 16u; bytes <<= 1u) {
         for (const auto mode : {TextureTileMode::kPs4Display2D, TextureTileMode::kPs4Thin2D}) {

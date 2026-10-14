@@ -15,6 +15,7 @@ void require(bool condition, const char* reason) {
 
 constexpr std::uint32_t X(std::uint32_t bit) { return 1u << bit; }
 constexpr std::uint32_t Y(std::uint32_t bit) { return 1u << (12u + bit); }
+constexpr std::uint32_t Z(std::uint32_t bit) { return 1u << (24u + bit); }
 
 // The element order inside an 8x8 micro tile (addrlib ComputePixelIndexWithinMicroTile): display tiling depends on
 // the element size, thin tiling interleaves x and y.
@@ -38,6 +39,7 @@ TextureTileMode Ps4TileMode(std::uint32_t tileIndex) {
         case 10: return TextureTileMode::kPs4Display2D;
         case 13: return TextureTileMode::kPs4Thin1D;
         case 14: return TextureTileMode::kPs4Thin2D;
+        case 19: return TextureTileMode::kPs4Thick1D;
         default: throw std::runtime_error("AGC graphics: PS4 tiling index " + std::to_string(tileIndex) + " is not supported");
     }
 }
@@ -47,6 +49,15 @@ Ps4TileBlock Ps4Tiling(TextureTileMode mode, std::uint32_t elementBytes) {
     const auto elementLog2 = static_cast<std::uint32_t>(std::countr_zero(elementBytes));
     // Byte-offset bits inside the pipe and bank interleave: the element's bytes, then its micro tile index.
     std::vector<std::uint32_t> offset(elementLog2, 0u);
+    if (mode == TextureTileMode::kPs4Thick1D) {
+        // A thick micro tile holds 8x8x4 elements; the low two slice bits interleave with x and y by element size
+        // (addrlib ComputePixelIndexWithinMicroTile, thick).
+        const auto order = elementBytes <= 2u ? std::array{X(0), Y(0), X(1), Y(1), Z(0), Z(1), X(2), Y(2)} : elementBytes == 4u ? std::array{X(0), Y(0), X(1), Z(0), Y(1), Z(1), X(2), Y(2)} : std::array{X(0), Y(0), Z(0), X(1), Y(1), Z(1), X(2), Y(2)};
+        offset.insert(offset.end(), order.begin(), order.end());
+        Ps4TileBlock block{256u * elementBytes, 8u, 8u, {}};
+        std::copy(offset.begin(), offset.end(), block.equation.begin());
+        return block;
+    }
     for (const auto bit : microTileBits(mode, elementBytes)) offset.push_back(bit);
     Ps4TileBlock block{};
     if (!IsPs4MacroTileMode(mode)) {

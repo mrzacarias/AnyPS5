@@ -169,6 +169,15 @@ void RunTextureTilingTests() {
         Require(surfaceSize == 4096ull * 3ull, "surface size must multiply the slice size by the array layer count");
     }
     {
+        // A PS4 thick 3D texture: slabs of four 16x16 slices in 8x8x4 micro tiles (1 KiB at 32 bpp).
+        const auto thick = DescribeSurface(thickVolume(TextureTileMode::kPs4Thick1D, 56, 16, 16, 6, 1));
+        Require(thick.thick && thick.blockDepth == 4u && thick.layerBytes == 4096u && thick.guestBytes == 8192u && thick.mips[0].blocksPerRow == 2u && thick.GuestLayerOffset(5u) == 4096u, "PS4 thick 3D texture layout changed");
+        // A PS4 thin 1D 3D texture: a stack of 1D-tiled slices, 33x33 padded to 40x40.
+        const auto slices = DescribeSurface(thickVolume(TextureTileMode::kPs4Thin1D, 71, 33, 33, 33, 1));
+        Require(!slices.thick && slices.layers == 33u && slices.imageDepth == 33u && slices.layerBytes == 40u * 40u * 8u && slices.GuestLayerOffset(2u) == 2u * 40u * 40u * 8u, "PS4 thin 3D texture layout changed");
+        reject([] { static_cast<void>(DescribeSurface(thickVolume(TextureTileMode::kPs4Thin2D, 56, 64, 64, 4, 1))); }, "2D-tiled or mipmapped PS4 3D textures");
+    }
+    {
         // A PS4 2D-tiled 32x32 RGBA8 texture: level 0 keeps its 128x64 macro tile however small it is; level 1 (16x16)
         // is 1D-tiled in 8x8 micro tiles right after it.
         const auto mips = ComputeMipLayout(TextureTileMode::kPs4Thin2D, 56, 32, 32, 2);
