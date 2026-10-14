@@ -16,6 +16,7 @@
 
 static constexpr std::uint32_t VIDEO_OUT_OUTPUT_OPTIONS_FIRST_WORD = 0x00FF0000;
 static constexpr std::size_t VIDEO_OUT_OUTPUT_OPTIONS_FREE_WORD = 3;
+static constexpr std::uint8_t VIDEO_OUT_COLORIMETRY_ANY = 0xFF;
 
 int ValidateVideoOutOutputMode_nid_no_patch(uint64_t mode, const VideoOutOutputOptions* options, int displayRefreshRate) {
     switch (mode) {
@@ -137,6 +138,31 @@ int APS5_VABI sceVideoOutGetFlipStatus(int handle, VideoOutFlipStatus* status) t
         return 0;
     }
     *status = cfg->flipStatus;
+    return 0;
+} catch (const ProcessShutdown&) {
+    LibcAwaitExit_nid_postfix();
+}
+
+void APS5_VABI sceVideoOutModeSetAny_(VideoOutMode* mode, std::uint32_t size) {
+    if (mode == nullptr || size < sizeof(mode->size)) {
+        throw std::runtime_error("sceVideoOutModeSetAny_: VIDEO_OUT_ERROR_INVALID_ADDRESS");
+    }
+    std::memset(mode, 0xff, size);
+    mode->size = size;
+}
+
+int APS5_VABI sceVideoOutConfigureOutputMode_(int handle, std::uint32_t reserved, const VideoOutMode* mode, const void* options, std::uint32_t modeSize, std::uint32_t optionsSize) try {
+    static_cast<void>(options);
+    static_cast<void>(optionsSize);
+    if (VideoOutDriver::Get().GetConfig(handle) == nullptr) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_HANDLE");
+    }
+    if (reserved != 0 || mode == nullptr || modeSize < offsetof(VideoOutMode, depth)) {
+        throw std::runtime_error(std::string(__func__) + ": VIDEO_OUT_ERROR_INVALID_VALUE");
+    }
+    if (mode->colorimetry != VIDEO_OUT_COLORIMETRY_ANY) {
+        throw std::runtime_error(std::string(__func__) + ": only the any colorimetry is implemented, as no HDR capability is reported");
+    }
     return 0;
 } catch (const ProcessShutdown&) {
     LibcAwaitExit_nid_postfix();

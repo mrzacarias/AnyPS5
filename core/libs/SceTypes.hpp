@@ -1945,6 +1945,17 @@ struct VideoOutFlipStatus {
     std::uint64_t reserved3[7] = {};
 };
 
+struct VideoOutMode {
+    std::uint32_t size;
+    std::uint8_t encoding;
+    std::uint8_t range;
+    std::uint8_t colorimetry;
+    std::uint8_t depth;
+    std::uint64_t refreshRate;
+    std::uint64_t resolution;
+    std::uint8_t reserved[8];
+};
+
 struct VideoOutFlipStatusPs4 {
     std::uint64_t count = 0;
     std::uint64_t processTime = 0;
