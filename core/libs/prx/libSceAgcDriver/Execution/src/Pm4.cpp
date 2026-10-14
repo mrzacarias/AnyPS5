@@ -833,7 +833,6 @@ void ExecuteIndirectRegisters(std::span<const std::uint32_t> packet, std::span<c
     }
 }
 
-std::array<std::uint32_t, 8> ReleaseMemFromEndOfPipe(std::span<const std::uint32_t> packet) {
 bool Ps4L2Prefetch(std::span<const std::uint32_t> packet) {
     constexpr std::uint32_t PrefetchRegister = 0x3022c;
     constexpr std::uint32_t DestinationIsRegister = 1u << 27u;
@@ -851,6 +850,7 @@ std::array<std::uint32_t, 8> ReleaseMemFromEndOfShader(std::span<const std::uint
     return {0xc0064900u | (packet[0] & 1u), packet[1] & 0xfffu, Data32 << 29u, packet[2], packet[3] & 0xffffu, packet[4], 0u, 0u};
 }
 
+std::array<std::uint32_t, 8> ReleaseMemFromEndOfPipe(std::span<const std::uint32_t> packet) {
     require(packet.size() == 6, "invalid EVENT_WRITE_EOP size");
     auto dataSelect = packet[3] >> 29u;
     require(dataSelect <= 4, "EVENT_WRITE_EOP data select is not implemented");
