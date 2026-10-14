@@ -834,12 +834,29 @@ void ExecuteIndirectRegisters(std::span<const std::uint32_t> packet, std::span<c
 }
 
 std::array<std::uint32_t, 8> ReleaseMemFromEndOfPipe(std::span<const std::uint32_t> packet) {
+bool Ps4L2Prefetch(std::span<const std::uint32_t> packet) {
+    constexpr std::uint32_t PrefetchRegister = 0x3022c;
+    constexpr std::uint32_t DestinationIsRegister = 1u << 27u;
+    return packet.size() == 7 && memorySelector((packet[1] >> 29u) & 3u) && (packet[6] & DestinationIsRegister) != 0 && packet[4] == PrefetchRegister && packet[5] == 0;
+}
+
+bool EndOfShaderFence(std::span<const std::uint32_t> packet) {
+    constexpr std::uint32_t SignalFence = 2;
+    return packet.size() == 5 && (packet[3] >> 29u) == SignalFence;
+}
+
+std::array<std::uint32_t, 8> ReleaseMemFromEndOfShader(std::span<const std::uint32_t> packet) {
+    require(EndOfShaderFence(packet), "EVENT_WRITE_EOS that stores GDS data is not implemented");
+    constexpr std::uint32_t Data32 = 1;
+    return {0xc0064900u | (packet[0] & 1u), packet[1] & 0xfffu, Data32 << 29u, packet[2], packet[3] & 0xffffu, packet[4], 0u, 0u};
+}
+
     require(packet.size() == 6, "invalid EVENT_WRITE_EOP size");
     auto dataSelect = packet[3] >> 29u;
     require(dataSelect <= 4, "EVENT_WRITE_EOP data select is not implemented");
     if (dataSelect == 4) dataSelect = 3;
     const auto interruptSelect = (packet[3] >> 24u) & 3u;
-    return {0xc0064900u | (packet[0] & 3u), packet[1] & 0xfffu, interruptSelect << 24u | dataSelect << 29u, packet[2], packet[3] & 0xffffu, packet[4], packet[5], 0u};
+    return {0xc0064900u | (packet[0] & 1u), packet[1] & 0xfffu, interruptSelect << 24u | dataSelect << 29u, packet[2], packet[3] & 0xffffu, packet[4], packet[5], 0u};
 }
 
 void Execute(std::span<const std::uint32_t> packet, QueueState& queue) {

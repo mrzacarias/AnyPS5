@@ -106,6 +106,9 @@ bool WaitComparesValue(std::span<const std::uint32_t> packet, std::uint64_t valu
 std::size_t WaitAwaitedBytes(std::span<const std::uint32_t> packet);
 std::size_t ConditionalWords(std::span<const std::uint32_t> packet);
 std::array<std::uint32_t, 8> ReleaseMemFromEndOfPipe(std::span<const std::uint32_t> packet);
+bool Ps4L2Prefetch(std::span<const std::uint32_t> packet);
+bool EndOfShaderFence(std::span<const std::uint32_t> packet);
+std::array<std::uint32_t, 8> ReleaseMemFromEndOfShader(std::span<const std::uint32_t> packet);
 std::uint32_t ReadCondition(std::span<const std::uint32_t> packet);
 // A label write (RELEASE_MEM with a data select, WRITE_DATA to memory): the destination and the
 // bytes it stores, so the write can be recorded on the GPU behind the work it signals. Packets
