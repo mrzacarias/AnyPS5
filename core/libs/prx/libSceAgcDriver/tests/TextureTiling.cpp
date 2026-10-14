@@ -169,6 +169,13 @@ void RunTextureTilingTests() {
         Require(surfaceSize == 4096ull * 3ull, "surface size must multiply the slice size by the array layer count");
     }
     {
+        // A PS4 2D-tiled 32x32 RGBA8 texture: level 0 keeps its 128x64 macro tile however small it is; level 1 (16x16)
+        // is 1D-tiled in 8x8 micro tiles right after it.
+        const auto mips = ComputeMipLayout(TextureTileMode::kPs4Thin2D, 56, 32, 32, 2);
+        Require(!mips[0].oneDimension && mips[0].blocksPerRow == 1 && mips[0].tiledSize == 128u * 64u * 4u, "PS4 macro-tiled level 0 must keep the macro tiling");
+        Require(mips[1].oneDimension && mips[1].tiledOffset == 128u * 64u * 4u && mips[1].tiledSize == 16u * 16u * 4u && mips[1].blocksPerRow == 2, "PS4 macro-tiled level 1 smaller than a macro tile must be 1D-tiled");
+    }
+    {
         const auto mips = ComputeMipLayout(TextureTileMode::kStandard256B, 1, 32, 32, 6);
         Require(mips.size() == 6, "standard 256B mip chain must contain the requested mip count");
         for (const auto& mip : mips) Require(!mip.tail, "standard 256B tile mode must never produce a mip tail");

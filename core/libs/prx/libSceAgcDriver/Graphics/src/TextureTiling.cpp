@@ -176,8 +176,9 @@ std::vector<TileMipLayout> ComputeLinearMipLayout(std::uint32_t bytesPerElement,
     return mips;
 }
 
-// GCN keeps level 0 first and every level whole, aligned to its tile block (256 bytes at least); a level of a 2D-tiled
-// surface narrower or shorter than a macro tile is 1D-tiled (addrlib ComputeSurfaceMipLevelTileMode).
+// GCN keeps level 0 first and every level whole, aligned to its tile block (256 bytes at least); a level past the
+// first of a 2D-tiled surface narrower or shorter than a macro tile is 1D-tiled (addrlib
+// ComputeSurfaceMipLevelTileMode); level 0 keeps the macro tiling however small it is.
 std::vector<TileMipLayout> ComputePs4MipLayout(TextureTileMode tileMode, std::uint32_t bytesPerElement, std::uint32_t texelWidth, std::uint32_t texelHeight, std::uint32_t width, std::uint32_t height, std::uint32_t mipCount) {
     std::vector<TileMipLayout> mips(mipCount);
     std::uint64_t offset = 0;
@@ -186,7 +187,7 @@ std::vector<TileMipLayout> ComputePs4MipLayout(TextureTileMode tileMode, std::ui
         mip.width = TexelLevelDimension(width, level, texelWidth);
         mip.height = TexelLevelDimension(height, level, texelHeight);
         const auto macro = GetBlockLayout(tileMode, bytesPerElement);
-        mip.oneDimension = IsPs4MacroTileMode(tileMode) && (mip.width < macro.blockWidth || mip.height < macro.blockHeight);
+        mip.oneDimension = IsPs4MacroTileMode(tileMode) && level != 0 && (mip.width < macro.blockWidth || mip.height < macro.blockHeight);
         const auto block = mip.oneDimension ? GetBlockLayout(Ps4OneDimensionMode(tileMode), bytesPerElement) : macro;
         const auto paddedWidth = AlignUp(mip.width, block.blockWidth);
         const auto paddedHeight = AlignUp(mip.height, block.blockHeight);
