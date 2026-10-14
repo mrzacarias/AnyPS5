@@ -2,6 +2,15 @@
 #include <cstddef>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libSceAgcDriver/State/include/Configuration.hpp"
+#include "prx/libSceAgcDriver/Eq/include/Event.hpp"
+#include <stdexcept>
+#include <string>
+
+static constexpr std::uint64_t SCE_GNM_EQ_EVENT_COMPUTE6_REL_MEM = 6;
+static constexpr std::uint64_t SCE_GNM_EQ_EVENT_GFX_EOP = 0x40;
+static constexpr std::uint32_t UnmappedComputeQueue = 0xFFFFFFFFu;
+static constexpr int SCE_GNM_ERROR_FAILURE = static_cast<int>(0x8EEE00FF);
 
 extern "C" {
 
@@ -60,14 +69,14 @@ int APS5_VABI sceGnmSetPsShader350(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmCreateWorkloadStream(void) {
-    NotImplemented_nid_no_patch("5udAm+6boVg");
+int APS5_VABI sceGnmCreateWorkloadStream(std::uint64_t name, std::uint32_t* workloadStream) {
+    if (name == 0 || workloadStream == nullptr) return 3;
+    *workloadStream = 1;
     return 0;
 }
 
 int APS5_VABI sceGnmQueryResourceRegistrationUserMemoryRequirements(void) {
-    NotImplemented_nid_no_patch("6IMbpR7nTzA");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmRequestFlipAndSubmitDoneForWorkload(void) {
@@ -81,8 +90,7 @@ int APS5_VABI sceGnmInsertPopMarker(void) {
 }
 
 int APS5_VABI sceGnmRegisterGdsResource(void) {
-    NotImplemented_nid_no_patch("9Mv61HaMhfA");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmMapComputeQueueWithPriority(void) {
@@ -110,9 +118,8 @@ int APS5_VABI sceGnmComputeWaitSemaphore(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmGetOffChipTessellationBufferSize(void) {
-    NotImplemented_nid_no_patch("FFVZcCu3zWU");
-    return 0;
+std::uint32_t APS5_VABI sceGnmGetOffChipTessellationBufferSize(void) {
+    return 0x800000u;
 }
 
 int APS5_VABI sceGnmSetEsShader(void) {
@@ -120,14 +127,13 @@ int APS5_VABI sceGnmSetEsShader(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmEndWorkload(void) {
-    NotImplemented_nid_no_patch("Fa3x75OOLRA");
-    return 0;
+int APS5_VABI sceGnmEndWorkload(std::uint64_t workload) {
+    if (workload == 0) return 2;
+    return ((workload >> 56u) & 0xffu) > 0xf ? 2 : 0;
 }
 
-int APS5_VABI sceGnmGetGpuCoreClockFrequency(void) {
-    NotImplemented_nid_no_patch("Fwvh++m9IQI");
-    return 0;
+std::uint32_t APS5_VABI sceGnmGetGpuCoreClockFrequency(void) {
+    return 800000000u;
 }
 
 int APS5_VABI sceGnmDrawIndexAuto(void) {
@@ -161,7 +167,6 @@ int APS5_VABI sceGnmDrawIndex(void) {
 }
 
 int APS5_VABI sceGnmValidateGetVersion(void) {
-    NotImplemented_nid_no_patch("HzMN7ANqYEc");
     return 0;
 }
 
@@ -205,9 +210,9 @@ int APS5_VABI sceGnmGetResourceName(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDeleteEqEvent(void) {
-    NotImplemented_nid_no_patch("PVT+fuoS9gU");
-    return 0;
+int APS5_VABI sceGnmDeleteEqEvent(KernelEqueue eq, std::uint64_t id) {
+    if (id != SCE_GNM_EQ_EVENT_GFX_EOP && id > SCE_GNM_EQ_EVENT_COMPUTE6_REL_MEM) throw std::runtime_error("sceGnmDeleteEqEvent: unknown event type " + std::to_string(id));
+    return AgcDriverDeleteEqEvent_nid_postfix(eq, static_cast<int>(id));
 }
 
 int APS5_VABI sceGnmValidationRegisterMemoryCheckCallback(void) {
@@ -220,14 +225,13 @@ int APS5_VABI sceGnmGetOwnerName(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDriverTraceInProgress(void) {
-    NotImplemented_nid_no_patch("R6z1xM3pW-w");
-    return 0;
+bool APS5_VABI sceGnmDriverTraceInProgress(void) {
+    return false;
 }
 
-int APS5_VABI sceGnmLogicalCuMaskToPhysicalCuMask(void) {
-    NotImplemented_nid_no_patch("RU74kek-N0c");
-    return 0;
+std::int32_t APS5_VABI sceGnmLogicalCuMaskToPhysicalCuMask(std::int64_t shaderEngine, std::int32_t logicalCuMask) {
+    static_cast<void>(shaderEngine);
+    return logicalCuMask;
 }
 
 int APS5_VABI sceGnmValidateGetDiagnosticInfo(void) {
@@ -240,9 +244,8 @@ int APS5_VABI sceGnmValidateDisableDiagnostics(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDriverCaptureInProgress(void) {
-    NotImplemented_nid_no_patch("TLV4mswiZ4A");
-    return 0;
+bool APS5_VABI sceGnmDriverCaptureInProgress(void) {
+    return false;
 }
 
 int APS5_VABI sceGnmGetResourceShaderGuid(void) {
@@ -260,13 +263,13 @@ int APS5_VABI sceGnmGetResourceUserData(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmGetEqEventType(void) {
-    NotImplemented_nid_no_patch("UoYY0DWMC0U");
-    return 0;
+int APS5_VABI sceGnmGetEqEventType(const KernelEvent* ev) {
+    if (ev == nullptr || ev->filter != -14 || (ev->ident != SCE_GNM_EQ_EVENT_GFX_EOP && ev->ident > SCE_GNM_EQ_EVENT_COMPUTE6_REL_MEM)) throw std::runtime_error("sceGnmGetEqEventType: not a Gnm graphics event");
+    return static_cast<int>(ev->ident);
 }
 
-int APS5_VABI sceGnmDestroyWorkloadStream(void) {
-    NotImplemented_nid_no_patch("UtObDRQiGbs");
+int APS5_VABI sceGnmDestroyWorkloadStream(std::uint32_t workloadStream) {
+    static_cast<void>(workloadStream);
     return 0;
 }
 
@@ -301,8 +304,7 @@ int APS5_VABI sceGnmDispatchIndirect(void) {
 }
 
 int APS5_VABI sceGnmRegisterOwner(void) {
-    NotImplemented_nid_no_patch("ZFqKFl23aMc");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmInsertPushColorMarker(void) {
@@ -316,13 +318,12 @@ int APS5_VABI sceGnmInsertSetColorMarker(void) {
 }
 
 int APS5_VABI sceGnmAreSubmitsAllowed(void) {
-    NotImplemented_nid_no_patch("b08AgtPlHPg");
-    return 0;
+    return 1;
 }
 
-int APS5_VABI sceGnmAddEqEvent(void) {
-    NotImplemented_nid_no_patch("b0xyllnVY-I");
-    return 0;
+int APS5_VABI sceGnmAddEqEvent(KernelEqueue eq, std::uint64_t id, void* udata) {
+    if (id != SCE_GNM_EQ_EVENT_GFX_EOP && id > SCE_GNM_EQ_EVENT_COMPUTE6_REL_MEM) throw std::runtime_error("sceGnmAddEqEvent: unknown event type " + std::to_string(id));
+    return AgcDriverAddQueueEqEvent_nid_postfix(eq, static_cast<int>(id), id == SCE_GNM_EQ_EVENT_GFX_EOP ? 0u : UnmappedComputeQueue, udata);
 }
 
 int APS5_VABI sceGnmDingDong(void) {
@@ -360,9 +361,8 @@ int APS5_VABI sceGnmGetPhysicalCounterFromVirtualized(void) {
     return 0;
 }
 
-int APS5_VABI sceRazorIsLoaded(void) {
-    NotImplemented_nid_no_patch("f33OrruQYbM");
-    return 0;
+bool APS5_VABI sceRazorIsLoaded(void) {
+    return false;
 }
 
 int APS5_VABI sceGnmRequestMipStatsReportAndReset(void) {
@@ -376,8 +376,7 @@ int APS5_VABI sceGnmComputeWaitOnAddress(void) {
 }
 
 int APS5_VABI sceGnmUnregisterOwnerAndResources(void) {
-    NotImplemented_nid_no_patch("fhKwCVVj9nk");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmGetProtectionFaultTimeStamp(void) {
@@ -400,9 +399,7 @@ int APS5_VABI sceGnmValidateDrawCommandBuffers(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmFlushGarlic(void) {
-    NotImplemented_nid_no_patch("iBt3Oe00Kvc");
-    return 0;
+void APS5_VABI sceGnmFlushGarlic(void) {
 }
 
 int APS5_VABI sceGnmGetLastWaitedAddress(void) {
@@ -410,19 +407,15 @@ int APS5_VABI sceGnmGetLastWaitedAddress(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmBeginWorkload(void) {
-    NotImplemented_nid_no_patch("ihxrbsoSKWc");
-    return 0;
+int APS5_VABI sceGnmBeginWorkload(std::uint32_t workloadStream, std::uint64_t* workload) {
+    if (workload == nullptr) return 3;
+    *workload = workloadStream < 0x10 ? 1 : 0;
+    return workloadStream > 0xf ? 1 : 0;
 }
 
-int APS5_VABI sceGnmDrawInitToDefaultContextState400(void) {
-    NotImplemented_nid_no_patch("im2ZuItabu4");
-    return 0;
-}
 
 int APS5_VABI sceGnmRegisterOwnerForSystem(void) {
-    NotImplemented_nid_no_patch("j6mSQs3UgaY");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmDrawIndexMultiInstanced(void) {
@@ -435,9 +428,8 @@ int APS5_VABI sceGnmSubmitCommandBuffersForWorkload(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmIsUserPaEnabled(void) {
-    NotImplemented_nid_no_patch("jg33rEKLfVs");
-    return 0;
+bool APS5_VABI sceGnmIsUserPaEnabled(void) {
+    return false;
 }
 
 int APS5_VABI sceGnmInsertSetMarker(void) {
@@ -456,13 +448,11 @@ int APS5_VABI sceGnmGetShaderStatus(void) {
 }
 
 int APS5_VABI sceGnmUnregisterResource(void) {
-    NotImplemented_nid_no_patch("k8EXkhIP+lM");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
-int APS5_VABI sceGnmGetTheTessellationFactorRingBufferBaseAddress(void) {
-    NotImplemented_nid_no_patch("ln33zjBrfjk");
-    return 0;
+std::uintptr_t APS5_VABI sceGnmGetTheTessellationFactorRingBufferBaseAddress(void) {
+    return AgcDriverTessellationFactorRingBase_nid_postfix();
 }
 
 int APS5_VABI sceGnmUpdatePsShader350(void) {
@@ -475,10 +465,6 @@ int APS5_VABI sceGnmGetShaderProgramBaseAddress(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDispatchInitDefaultHardwareState(void) {
-    NotImplemented_nid_no_patch("nF6bFRUBRAU");
-    return 0;
-}
 
 int APS5_VABI sceGnmUpdateGsShader(void) {
     NotImplemented_nid_no_patch("nLM2i2+65hA");
@@ -486,8 +472,7 @@ int APS5_VABI sceGnmUpdateGsShader(void) {
 }
 
 int APS5_VABI sceGnmRegisterResource(void) {
-    NotImplemented_nid_no_patch("nvEwfYAImTs");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmGetGpuBlockStatus(void) {
@@ -501,8 +486,7 @@ int APS5_VABI sceGnmDrawIndexOffset(void) {
 }
 
 int APS5_VABI sceGnmSetResourceRegistrationUserMemory(void) {
-    NotImplemented_nid_no_patch("q-qhDxP67Hg");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmValidateDispatchCommandBuffers(void) {
@@ -515,9 +499,8 @@ int APS5_VABI sceGnmDebugHardwareStatus(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmValidateOnSubmitEnabled(void) {
-    NotImplemented_nid_no_patch("rTIV11nMQuM");
-    return 0;
+bool APS5_VABI sceGnmValidateOnSubmitEnabled(void) {
+    return false;
 }
 
 int APS5_VABI sceGnmDrawOpaqueAuto(void) {
@@ -555,14 +538,9 @@ int APS5_VABI sceGnmSubmitAndFlipCommandBuffers(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawInitDefaultHardwareState350(void) {
-    NotImplemented_nid_no_patch("yb2cRhagD1I");
-    return 0;
-}
 
 int APS5_VABI sceGnmUnregisterAllResourcesForOwner(void) {
-    NotImplemented_nid_no_patch("yhFCnaz5daw");
-    return 0;
+    return SCE_GNM_ERROR_FAILURE;
 }
 
 int APS5_VABI sceGnmSubmitDone(void) {
