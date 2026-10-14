@@ -191,4 +191,15 @@ int APS5_VABI sceNetCtlUnregisterCallback(int cid) {
     return 0;
 }
 
+int APS5_VABI sceNetCtlRegisterCallbackForNpToolkit(NetCtlCallback func, void* arg, int* cid) {
+    return sceNetCtlRegisterCallback(func, arg, cid);
+}
+
+int APS5_VABI sceNetCtlUnregisterCallbackForNpToolkit(int cid) {
+    return sceNetCtlUnregisterCallback(cid);
+}
+
+int APS5_VABI sceNetCtlCheckCallbackForNpToolkit(void) {
+    return sceNetCtlCheckCallback();
+}
 }

@@ -1,5 +1,9 @@
 # libSceUserService technical debt
 
+### Silent stubs
+
+- [sceUserServiceRegisterEventCallback, sceUserServiceUnregisterEventCallback](../../../core/libs/prx/libSceUserService/Export.cpp) (libSceUserService) - the PS4 NpToolkit2 module registers an event callback; no user service event (login, logout) ever happens on the host, so both calls return 0 without keeping the callback, as [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/libraries/system/userservice.cpp) does. The arguments are assumed to be a callback and its argument
+
 ### Unknown function info
 
 - [sceUserServiceGetNpAccountId](../../../core/libs/prx/libSceUserService/Export.cpp) (libSceUserService) - the account id for a user with no linked PSN account is assumed to be 0 with success; libSceNpManager's `sceNpGetAccountIdA` answers the same question with `SCE_NP_ERROR_SIGNED_OUT`

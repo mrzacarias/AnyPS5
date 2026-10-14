@@ -186,4 +186,13 @@ int APS5_VABI sceUserServiceGetNpAccountId(int user_id, uint64_t* account_id) {
  return USER_SERVICE_OK;
 }
 
+int APS5_VABI sceUserServiceRegisterEventCallback(void* callback, void* argument) {
+    static_cast<void>(callback);
+    static_cast<void>(argument);
+    return USER_SERVICE_OK;
+}
+
+int APS5_VABI sceUserServiceUnregisterEventCallback(void) {
+    return USER_SERVICE_OK;
+}
 }

@@ -249,4 +249,15 @@ int APS5_VABI sceNpGetSandboxInfo(void* sandbox_info) {
     return 0;
 }
 
+int APS5_VABI sceNpRegisterStateCallbackForToolkit(void* callback, void* userdata) {
+    return sceNpRegisterStateCallback(callback, userdata);
+}
+
+int APS5_VABI sceNpUnregisterStateCallbackForToolkit(void) {
+    return sceNpUnregisterStateCallback();
+}
+
+int APS5_VABI sceNpCheckCallbackForLib(void) {
+    return sceNpCheckCallback();
+}
 }
