@@ -1,4 +1,5 @@
 #include "prx/libSceAgcDriver/Graphics/include/TextureDetiler.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Ps4Tiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Resources.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureSwizzleEquations.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
@@ -55,6 +56,10 @@ std::uint32_t BlockBytesFor(TextureTileMode tileMode) {
         case TextureTileMode::kS64KBX:
         case TextureTileMode::kD64KBX:
         case TextureTileMode::kR64KBX: return 65536u;
+        case TextureTileMode::kPs4Display1D:
+        case TextureTileMode::kPs4Display2D:
+        case TextureTileMode::kPs4Thin1D:
+        case TextureTileMode::kPs4Thin2D: return 0u;
     }
     throw std::runtime_error("AGC graphics: TextureDetiler encountered an unknown tile mode");
 }
@@ -153,6 +158,13 @@ VkPipeline TextureDetiler::pipeline(TextureTileMode tileMode, std::uint32_t elem
         const auto extent = ThickBlockExtent(tileMode, elementBytes);
         values[20] = extent[0];
         values[21] = extent[1];
+    } else if (IsPs4TileMode(tileMode)) {
+        const auto block = Ps4Tiling(tileMode, elementBytes);
+        values[1] = block.bytes;
+        values[2] = 2u;
+        std::copy(block.equation.begin(), block.equation.end(), values.begin() + 4);
+        values[20] = block.width;
+        values[21] = block.height;
     } else if (const auto mode = EquationSwizzleMode(tileMode); mode != 0) {
         const auto* equation = FindTextureSwizzleEquation(mode, elementBytes);
         if (equation == nullptr) Require(false, "no swizzle equation for tile mode " + std::to_string(mode) + " at " + std::to_string(elementBytes) + " bytes per element");
@@ -200,7 +212,7 @@ void TextureDetiler::Dispatch(VkCommandBuffer commands, TextureTileMode tileMode
     Require(source != VK_NULL_HANDLE && destination != VK_NULL_HANDLE, "texture detiling requires source and destination buffers");
     std::uint32_t columnEnd = 0, rowEnd = 0;
     checkWindow(layout, window, columnEnd, rowEnd);
-    const auto target = pipeline(tileMode, elementBytes, retile, thick);
+    const auto target = pipeline(LevelTileMode(tileMode, layout), elementBytes, retile, thick);
     const auto alignment = std::max<VkDeviceSize>(context.limits.minStorageBufferOffsetAlignment, 4);
     const auto sourceDescriptorOffset = sourceOffset - sourceOffset % alignment;
     const auto destinationDescriptorOffset = destinationOffset - destinationOffset % alignment;
@@ -370,7 +382,7 @@ void TextureDetiler::DispatchImage(VkCommandBuffer commands, TextureTileMode til
     Require(ImageElementFormat(elementBytes) != VK_FORMAT_UNDEFINED, "unsupported element size for texture detiling through an image");
     std::uint32_t columnEnd = 0, rowEnd = 0;
     checkWindow(layout, window, columnEnd, rowEnd);
-    const auto target = pipeline(tileMode, elementBytes, retile, false, true);
+    const auto target = pipeline(LevelTileMode(tileMode, layout), elementBytes, retile, false, true);
     const auto alignment = std::max<VkDeviceSize>(context.limits.minStorageBufferOffsetAlignment, 4);
     const auto descriptorOffset = tiledOffset - tiledOffset % alignment;
     const auto base = tiledOffset - descriptorOffset;

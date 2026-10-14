@@ -1,5 +1,7 @@
 #include <cstdio>
 #include "prx/libSceAgcDriver/Graphics/include/GuestTextureResource.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Ps4Tiling.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Context.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureFormat.hpp"
@@ -133,7 +135,8 @@ GuestTextureResource DecodeTextureResource(std::span<const std::uint32_t> words)
     TextureTileMode tileMode;
     TextureDimension dimension;
     try {
-        tileMode = resolveTileMode(tileModeRaw);
+        // A PS4 T# carries its GCN tiling index in word 7 (GcnImageDescriptor).
+        tileMode = ShaderRecompiler::GcnShaderCode() && (words[7] >> 31u) != 0u ? Ps4TileMode(words[7] & 0x1fu) : resolveTileMode(tileModeRaw);
         dimension = resolveDimension(typeRaw);
     } catch (const std::exception& error) {
         throw std::runtime_error(std::string(error.what()) + describe());

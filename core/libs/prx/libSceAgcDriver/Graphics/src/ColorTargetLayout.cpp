@@ -1,4 +1,5 @@
 #include "prx/libSceAgcDriver/Graphics/include/ColorTargetLayout.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureSwizzleEquations.hpp"
 #include <array>
@@ -47,7 +48,7 @@ ColorTileMode DecodeColorTileMode(std::uint32_t attrib3) {
     require((attrib3 & 0x80002000u) == 0 && ((resourceType == 0 && (attrib3 & 0x1fffu) == 0) || resourceType == 1 || resourceType == 2) && ((attrib3 >> 27u) & 7u) == 1, "AGC graphics: unsupported color depth, dimension, resource level or metadata mode");
     const auto mode = (attrib3 >> 14u) & 0x1fu;
     const auto fmaskMode = (attrib3 >> 19u) & 0x1fu;
-    require(mode == 0 || mode == 5 || mode == 9 || mode == 0x15 || mode == 0x16 || mode == 0x1a || mode == 0x1b, "AGC graphics: unsupported color tile mode");
+    require(mode == 0 || mode == 5 || mode == 9 || mode == 0x15 || mode == 0x16 || mode == 0x1a || mode == 0x1b || (mode >= 0x1c && ShaderRecompiler::GcnShaderCode()), "AGC graphics: unsupported color tile mode");
     require(fmaskMode == 0 || fmaskMode == 0x18 || fmaskMode == (mode & ~3u), "AGC graphics: unsupported color FMASK swizzle mode");
     require(resourceType != 0 || mode == 0 || mode == 0x1b, "AGC graphics: 1D color targets with a standard swizzle mode are invalid");
     return static_cast<ColorTileMode>(mode);
@@ -155,6 +156,16 @@ ColorTargetLayout::ColorTargetLayout(std::uint32_t width, std::uint32_t height, 
             yOffsets = tables.y.data();
             break;
         }
+        case ColorTileMode::Ps4Display1D:
+        case ColorTileMode::Ps4Thin1D:
+        case ColorTileMode::Ps4Display2D:
+        case ColorTileMode::Ps4Thin2D:
+            ps4Block = Ps4Tiling(ColorTextureTileMode(mode), bytesPerElement);
+            blockWidth = ps4Block.width;
+            blockHeight = ps4Block.height;
+            pitch = (width + blockWidth - 1u) / blockWidth * blockWidth;
+            paddedHeight = (height + blockHeight - 1u) / blockHeight * blockHeight;
+            break;
         default: throw std::runtime_error("AGC graphics: unsupported color tile mode");
     }
     const auto size = static_cast<std::uint64_t>(pitch) * paddedHeight * bytesPerElement;
@@ -165,6 +176,12 @@ ColorTargetLayout::ColorTargetLayout(std::uint32_t width, std::uint32_t height, 
 std::size_t ColorTargetLayout::offset(std::uint32_t x, std::uint32_t y) const {
     if (mode == ColorTileMode::Linear) return (static_cast<std::size_t>(y) * pitch + x) * elementBytes;
     const auto block = static_cast<std::size_t>(y / blockHeight) * (pitch / blockWidth) + x / blockWidth;
+    if (ColorTileModeIsPs4(mode)) {
+        std::uint32_t inBlock = 0;
+        const auto coordinates = (x & 0xfffu) | ((y << 12u) & 0xfff000u);
+        for (std::uint32_t bit = 0; bit < 16u; ++bit) inBlock |= parity(coordinates & ps4Block.equation[bit]) << bit;
+        return block * ps4Block.bytes + inBlock;
+    }
     auto inBlock = xOffsets[x % blockWidth] ^ yOffsets[y % blockHeight];
     if (equation != nullptr) {
         const auto highX = (x & ~(blockWidth - 1u)) & 0xfffu;

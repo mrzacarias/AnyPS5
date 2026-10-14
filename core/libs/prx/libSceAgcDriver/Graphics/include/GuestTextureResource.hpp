@@ -24,6 +24,11 @@ enum class TextureTileMode {
     kD64KBT,
     kS4KBX,
     kD4KBX,
+    // PS4 (GFX7) display and thin micro tiling, in 8x8 micro tiles (1D) or in macro tiles (2D); Ps4Tiling.hpp.
+    kPs4Display1D,
+    kPs4Display2D,
+    kPs4Thin1D,
+    kPs4Thin2D,
     // Upstream's name for SW_64KB_R_X (tile mode 0x1b).
     RenderTarget64KB = kR64KBX
 };

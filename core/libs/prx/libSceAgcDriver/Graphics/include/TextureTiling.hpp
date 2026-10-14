@@ -22,7 +22,12 @@ struct TileMipLayout {
     bool tail;
     std::uint32_t tailX;
     std::uint32_t tailY;
+    // A level of a PS4 2D-tiled surface too small for a macro tile, which is 1D-tiled (Ps4OneDimensionMode).
+    bool oneDimension = false;
 };
+
+// The tile mode a level is tiled with: the surface's, or the 1D mode of a small PS4 level.
+TextureTileMode LevelTileMode(TextureTileMode tileMode, const TileMipLayout& mip);
 
 std::vector<TileMipLayout> ComputeMipLayout(TextureTileMode tileMode, std::uint32_t format, std::uint32_t width, std::uint32_t height, std::uint32_t mipCount);
 std::uint64_t ComputeSurfaceSize(const std::vector<TileMipLayout>& mips, std::uint32_t arrayLayers);

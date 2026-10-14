@@ -20,7 +20,8 @@ void SetGcnShaderCode(bool gcn);
 // The RDNA image format (IrBufferFormat value) of a GCN image data and number format pair.
 [[nodiscard]] std::uint32_t GcnImageFormat(std::uint32_t dataFormat, std::uint32_t numberFormat);
 
-// GCN buffer and image descriptors in the RDNA layout. An image keeps no GCN tiling: it is linear.
+// GCN buffer and image descriptors in the RDNA layout. An image is linear to RDNA; its word 7 holds bit 31 and the
+// GCN tiling index.
 [[nodiscard]] std::array<std::uint32_t, 4> GcnBufferDescriptor(const std::array<std::uint32_t, 4>& gcn);
 [[nodiscard]] std::array<std::uint32_t, 8> GcnImageDescriptor(const std::array<std::uint32_t, 8>& gcn);
 

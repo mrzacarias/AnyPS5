@@ -208,7 +208,8 @@ std::array<std::uint32_t, 8> GcnImageDescriptor(const std::array<std::uint32_t, 
     // height minus one in word 2, data (25:20) and number (29:26) formats in word 1, tiling index
     // in word 3, depth and pitch in word 4, base and last array slice in word 5. RDNA splits the width over words 1
     // and 2, puts the format at 28:20 of word 1, the swizzle mode where the tiling index was, the last slice and
-    // base slice in word 4 and the last mip level in word 5.
+    // base slice in word 4 and the last mip level in word 5. Word 7, the metadata address of a compressed RDNA image,
+    // carries the GCN tiling index under bit 31 for the driver, which reads the image with the PS4 tiling.
     const auto width = gcn[2] & 0x3fffu;
     const auto height = (gcn[2] >> 14u) & 0x3fffu;
     const auto format = GcnImageFormat((gcn[1] >> 20u) & 0x3fu, (gcn[1] >> 26u) & 0xfu);
@@ -217,7 +218,7 @@ std::array<std::uint32_t, 8> GcnImageDescriptor(const std::array<std::uint32_t, 
     const bool array = type == 12u || type == 13u;
     const auto depth = array ? (gcn[5] >> 13u) & 0x1fffu : gcn[4] & 0x1fffu;
     return {gcn[0], (gcn[1] & 0xfff3fu) | (format << 20u) | ((width & 3u) << 30u), (width >> 2u) | (height << 14u) | (1u << 31u), (gcn[3] & 0x000fffffu) | (type << 28u),
-            depth | ((gcn[5] & 0x1fffu) << 16u), ((gcn[3] >> 16u) & 0xfu) << 4u, 0u, 0u};
+            depth | ((gcn[5] & 0x1fffu) << 16u), ((gcn[3] >> 16u) & 0xfu) << 4u, 0u, (1u << 31u) | ((gcn[3] >> 20u) & 0x1fu)};
 }
 
 RdnaInstruction DecodeGcnInstruction(std::uint32_t programCounter, std::span<const std::uint32_t> code, std::uint32_t wordIndex) {

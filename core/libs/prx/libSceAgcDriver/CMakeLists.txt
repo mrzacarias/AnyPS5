@@ -203,6 +203,7 @@ set(agcDriverSources
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/TextureFormat.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/DccMetadata.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/TextureTiling.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/Ps4Tiling.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/TextureDetiler.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/Texture.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/PassHazards.cpp
@@ -1020,6 +1021,19 @@ if(BUILD_TESTING)
         set_tests_properties(agc_host_import_retire PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
     endif()
+endif()
+
+add_test_executable(agc_ps4_tiling_tests EXCLUDE_FROM_ALL
+        tests/Ps4Tiling.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Graphics/src/Ps4Tiling.cpp
+)
+target_include_directories(agc_ps4_tiling_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(agc_ps4_tiling_tests PRIVATE shader_recompiler_agc_driver)
+set_target_properties(agc_ps4_tiling_tests PROPERTIES CXX_EXTENSIONS OFF)
+configure_windows_unwind(agc_ps4_tiling_tests)
+if(BUILD_TESTING)
+    set_target_properties(agc_ps4_tiling_tests PROPERTIES EXCLUDE_FROM_ALL OFF)
+    add_test(NAME agc_ps4_tiling COMMAND agc_ps4_tiling_tests)
 endif()
 
 add_test_executable(agc_ps4_registers_tests EXCLUDE_FROM_ALL

@@ -9,6 +9,17 @@ constexpr std::uint32_t ColorBase = 0x318;
 constexpr std::uint32_t ColorStride = 0xf;
 constexpr std::uint32_t ColorTargets = 8;
 
+// The color swizzle mode of a PS4 tiling index: display or thin 1D or 2D (0x1c-0x1f), else linear.
+std::uint32_t colorSwizzleMode(std::uint32_t tileIndex) {
+    switch (tileIndex) {
+        case 9: return 0x1cu;
+        case 13: return 0x1du;
+        case 10: return 0x1eu;
+        case 14: return 0x1fu;
+        default: return 0u;
+    }
+}
+
 std::uint32_t read(const Registers& context, std::uint32_t offset) {
     const auto found = context.find(offset);
     return found == context.end() ? 0u : found->second;
@@ -39,9 +50,9 @@ void WritePs4ContextRegister(Registers& context, std::uint32_t offset, std::uint
             value &= ~0x07f80080u;
             break;
         case 5:
-            // CB_COLOR_ATTRIB keeps its sample counts and alpha override; its tile mode indices become a linear 2D
-            // CB_COLOR_ATTRIB3 at resource level 1.
-            context.insert_or_assign(0x3b8 + slot, (1u << 27u) | (1u << 24u));
+            // CB_COLOR_ATTRIB keeps its sample counts and alpha override; its tile mode index becomes the swizzle mode of
+            // a 2D CB_COLOR_ATTRIB3 at resource level 1: linear, or a PS4 tiling (ColorTileMode::Ps4*).
+            context.insert_or_assign(0x3b8 + slot, (1u << 27u) | (1u << 24u) | (colorSwizzleMode(value & 0x1fu) << 14u));
             value &= 0x3f000u;
             break;
         default:

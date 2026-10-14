@@ -2,6 +2,7 @@
 #define CORE_LIBS_PRX_LIBSCEAGCDRIVER_GRAPHICS_INCLUDE_COLORTARGETLAYOUT_HPP
 
 #include "prx/libSceAgcDriver/Graphics/include/GuestTextureResource.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Ps4Tiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -19,8 +20,17 @@ enum class ColorTileMode : std::uint32_t {
     S4KBX = 0x15,
     D4KBX = 0x16,
     D64KBX = 0x1a,
-    RenderTarget = 0x1b
+    RenderTarget = 0x1b,
+    // PS4 (GFX7) tilings, in swizzle mode numbers RDNA leaves unused; Ps4Registers writes them to CB_COLOR_ATTRIB3.
+    Ps4Display1D = 0x1c,
+    Ps4Thin1D = 0x1d,
+    Ps4Display2D = 0x1e,
+    Ps4Thin2D = 0x1f
 };
+
+constexpr bool ColorTileModeIsPs4(ColorTileMode mode) {
+    return mode == ColorTileMode::Ps4Display1D || mode == ColorTileMode::Ps4Thin1D || mode == ColorTileMode::Ps4Display2D || mode == ColorTileMode::Ps4Thin2D;
+}
 
 constexpr bool ColorTileModeIsXor(ColorTileMode mode) {
     return mode == ColorTileMode::S4KBX || mode == ColorTileMode::D4KBX || mode == ColorTileMode::D64KBX || mode == ColorTileMode::RenderTarget;
@@ -31,6 +41,13 @@ constexpr std::uint32_t ColorTileModeBlockBytes(ColorTileMode mode) {
 }
 
 constexpr TextureTileMode ColorTextureTileMode(ColorTileMode mode) {
+    switch (mode) {
+        case ColorTileMode::Ps4Display1D: return TextureTileMode::kPs4Display1D;
+        case ColorTileMode::Ps4Thin1D: return TextureTileMode::kPs4Thin1D;
+        case ColorTileMode::Ps4Display2D: return TextureTileMode::kPs4Display2D;
+        case ColorTileMode::Ps4Thin2D: return TextureTileMode::kPs4Thin2D;
+        default: break;
+    }
     return mode == ColorTileMode::Linear ? TextureTileMode::kLinear : mode == ColorTileMode::Standard4KB ? TextureTileMode::kStandard4KB : mode == ColorTileMode::Standard64KB ? TextureTileMode::kStandard64KB : mode == ColorTileMode::S4KBX ? TextureTileMode::kS4KBX : mode == ColorTileMode::D4KBX ? TextureTileMode::kD4KBX : mode == ColorTileMode::D64KBX ? TextureTileMode::kD64KBX : TextureTileMode::kR64KBX;
 }
 
@@ -42,7 +59,7 @@ public:
     ColorTargetLayout(std::uint32_t width, std::uint32_t height, ColorTileMode mode, std::uint32_t bytesPerElement = 4, std::uint32_t pipeBankXor = 0);
     std::size_t Bytes() const { return bytes; }
     std::size_t LinearBytes() const { return static_cast<std::size_t>(width) * height * elementBytes; }
-    std::size_t Alignment() const { return ColorTileModeBlockBytes(mode); }
+    std::size_t Alignment() const { return ColorTileModeIsPs4(mode) ? ps4Block.bytes : ColorTileModeBlockBytes(mode); }
     std::uint32_t BlocksPerRow() const { return pitch / blockWidth; }
     std::size_t Offset(std::uint32_t x, std::uint32_t y) const;
     void Detile(std::span<const std::byte> source, std::span<std::byte> destination) const;
@@ -63,6 +80,8 @@ private:
     const std::uint32_t* xOffsets = nullptr;
     const std::uint32_t* yOffsets = nullptr;
     const TextureSwizzleEquation* equation = nullptr;
+    // A PS4 tiling's block, addressed from the whole coordinates.
+    Ps4TileBlock ps4Block{};
 };
 
 class CmaskLayout {

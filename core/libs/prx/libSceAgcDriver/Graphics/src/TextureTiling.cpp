@@ -1,5 +1,6 @@
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Context.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/Ps4Tiling.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureFormat.hpp"
 #include <string>
 #include <algorithm>
@@ -58,6 +59,13 @@ BlockLayout GetBlockLayout(TextureTileMode tileMode, std::uint32_t bytesPerEleme
         case TextureTileMode::kS64KBX:
         case TextureTileMode::kD64KBX:
         case TextureTileMode::kR64KBX: return {65536u, 1u << kLog2BlockThin64KB[index].width, 1u << kLog2BlockThin64KB[index].height};
+        case TextureTileMode::kPs4Display1D:
+        case TextureTileMode::kPs4Display2D:
+        case TextureTileMode::kPs4Thin1D:
+        case TextureTileMode::kPs4Thin2D: {
+            const auto block = Ps4Tiling(tileMode, bytesPerElement);
+            return {block.bytes, block.width, block.height};
+        }
     }
     throw std::runtime_error("AGC graphics: GetBlockLayout encountered an unknown tile mode");
 }
@@ -100,7 +108,11 @@ bool GetMipTailLayout(TextureTileMode tileMode, const BlockLayout& block, std::u
     switch (tileMode) {
         case TextureTileMode::kLinear:
         case TextureTileMode::kStandard256B:
-        case TextureTileMode::kD256B: return false;
+        case TextureTileMode::kD256B:
+        case TextureTileMode::kPs4Display1D:
+        case TextureTileMode::kPs4Display2D:
+        case TextureTileMode::kPs4Thin1D:
+        case TextureTileMode::kPs4Thin2D: return false;
         case TextureTileMode::kStandard4KB:
         case TextureTileMode::kD4KB:
         case TextureTileMode::kS4KBX:
@@ -164,7 +176,38 @@ std::vector<TileMipLayout> ComputeLinearMipLayout(std::uint32_t bytesPerElement,
     return mips;
 }
 
+// GCN keeps level 0 first and every level whole, aligned to its tile block (256 bytes at least); a level of a 2D-tiled
+// surface narrower or shorter than a macro tile is 1D-tiled (addrlib ComputeSurfaceMipLevelTileMode).
+std::vector<TileMipLayout> ComputePs4MipLayout(TextureTileMode tileMode, std::uint32_t bytesPerElement, std::uint32_t texelWidth, std::uint32_t texelHeight, std::uint32_t width, std::uint32_t height, std::uint32_t mipCount) {
+    std::vector<TileMipLayout> mips(mipCount);
+    std::uint64_t offset = 0;
+    for (std::uint32_t level = 0; level < mipCount; ++level) {
+        auto& mip = mips[level];
+        mip.width = TexelLevelDimension(width, level, texelWidth);
+        mip.height = TexelLevelDimension(height, level, texelHeight);
+        const auto macro = GetBlockLayout(tileMode, bytesPerElement);
+        mip.oneDimension = IsPs4MacroTileMode(tileMode) && (mip.width < macro.blockWidth || mip.height < macro.blockHeight);
+        const auto block = mip.oneDimension ? GetBlockLayout(Ps4OneDimensionMode(tileMode), bytesPerElement) : macro;
+        const auto paddedWidth = AlignUp(mip.width, block.blockWidth);
+        const auto paddedHeight = AlignUp(mip.height, block.blockHeight);
+        const std::uint64_t alignment = std::max(block.blockSize, 256u);
+        offset = (offset + alignment - 1u) / alignment * alignment;
+        mip.tiledOffset = offset;
+        mip.tiledSize = static_cast<std::uint64_t>(paddedWidth) * paddedHeight * bytesPerElement;
+        mip.linearOffset = offset;
+        mip.blocksPerRow = paddedWidth / block.blockWidth;
+        mip.pitchBytes = paddedWidth * bytesPerElement;
+        mip.linearSize = static_cast<std::uint64_t>(mip.pitchBytes) * mip.height;
+        mip.tail = false;
+        mip.tailX = 0;
+        mip.tailY = 0;
+        offset += mip.tiledSize;
+    }
+    return mips;
+}
+
 std::vector<TileMipLayout> ComputeTiledMipLayout(TextureTileMode tileMode, std::uint32_t bytesPerElement, std::uint32_t texelWidth, std::uint32_t texelHeight, std::uint32_t width, std::uint32_t height, std::uint32_t mipCount) {
+    if (IsPs4TileMode(tileMode)) return ComputePs4MipLayout(tileMode, bytesPerElement, texelWidth, texelHeight, width, height, mipCount);
     const auto block = GetBlockLayout(tileMode, bytesPerElement);
     const auto elementsWidth0 = (width + texelWidth - 1u) / texelWidth;
     const auto elementsHeight0 = (height + texelHeight - 1u) / texelHeight;
@@ -270,6 +313,10 @@ std::array<std::uint32_t, 3> ThickBlockExtent(TextureTileMode tileMode, std::uin
     }
 }
 
+TextureTileMode LevelTileMode(TextureTileMode tileMode, const TileMipLayout& mip) {
+    return mip.oneDimension ? Ps4OneDimensionMode(tileMode) : tileMode;
+}
+
 std::array<std::uint32_t, 3> ThinBlockLayout(TextureTileMode tileMode, std::uint32_t bytesPerElement) {
     const auto block = GetBlockLayout(tileMode, bytesPerElement);
     return {block.blockSize, block.blockWidth, block.blockHeight};
@@ -289,7 +336,7 @@ std::vector<std::pair<std::uint64_t, std::uint64_t>> CoveredMipBytes(TextureTile
         for (std::uint32_t row = 0; row < mip.height; ++row) add(static_cast<std::uint64_t>(row) * mip.pitchBytes, static_cast<std::uint64_t>(row) * mip.pitchBytes + rowBytes);
         return covered;
     }
-    const auto block = ThinBlockLayout(tileMode, bytesPerElement);
+    const auto block = ThinBlockLayout(LevelTileMode(tileMode, mip), bytesPerElement);
     const auto wholeColumns = std::min(mip.width / block[1], mip.blocksPerRow);
     const auto wholeRows = mip.height / block[2];
     for (std::uint32_t row = 0; row < wholeRows && wholeColumns != 0; ++row) {
@@ -407,6 +454,8 @@ SurfaceGeometry DescribeSurface(const GuestTextureResource& descriptor) {
     }
     geometry.mips = ComputeMipLayout(descriptor.tileMode, descriptor.format, descriptor.width, descriptor.height, descriptor.mipCount);
     const bool layered = descriptor.dimension == TextureDimension::k2DArray || descriptor.dimension == TextureDimension::k1DArray || descriptor.dimension == TextureDimension::kCube;
+    // GCN keeps every slice of a level together, so a PS4 array is laid out level by level, not slice by slice.
+    Require(!IsPs4TileMode(descriptor.tileMode) || !layered || descriptor.mipCount == 1u || descriptor.depthOrLastArray == 0u, "AGC graphics: mipmapped PS4 texture arrays are not implemented");
     geometry.layers = layered ? descriptor.depthOrLastArray + 1u : 1u;
     geometry.imageLayers = geometry.layers;
     geometry.guestBytes = ComputeSurfaceSize(geometry.mips, geometry.layers);
