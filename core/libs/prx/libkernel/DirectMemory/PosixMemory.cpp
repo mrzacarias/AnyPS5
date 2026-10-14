@@ -10,9 +10,6 @@
 #include <system_error>
 #if defined(__linux__)
 #include <fcntl.h>
-#endif
-#ifndef _WIN32
-#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -84,44 +81,6 @@ bool Mapped(std::uintptr_t address) {
 
 extern "C" {
 
-#ifndef _WIN32
-void* MapFileCopy(std::size_t length, int protection, int descriptor, std::int64_t offset, std::size_t alignment, int& error) {
-    struct stat status {};
-    if (fstat(descriptor, &status) != 0) {
-        error = errno == EBADF ? GuestBadDescriptor : GuestIoError;
-        return nullptr;
-    }
-    if (!S_ISREG(status.st_mode)) {
-        error = GuestNotSupported;
-        return nullptr;
-    }
-    void* mapped = nullptr;
-    if (DoMapAnon(&mapped, length, 3, 0, alignment) != 0) {
-        error = GuestNoMemory;
-        return nullptr;
-    }
-    auto* bytes = static_cast<std::uint8_t*>(mapped);
-    std::size_t done = 0;
-    while (done < length) {
-        const auto count = ::pread(descriptor, bytes + done, length - done, static_cast<off_t>(offset + static_cast<std::int64_t>(done)));
-        if (count < 0 && errno == EINTR) continue;
-        if (count < 0) {
-            DoMunmap(mapped, length);
-            error = GuestIoError;
-            return nullptr;
-        }
-        if (count == 0) break;
-        done += static_cast<std::size_t>(count);
-    }
-    if (protection != 3 && DoMprotect(mapped, length, protection) != 0) {
-        DoMunmap(mapped, length);
-        error = GuestNoMemory;
-        return nullptr;
-    }
-    return mapped;
-}
-#endif
-
 void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protection,
                                 int flags, int descriptor, std::int64_t offset) noexcept {
     const auto failed = [](int error) -> void* {
@@ -165,24 +124,12 @@ void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protecti
     const int accessMode = descriptorFlags & O_ACCMODE;
     if ((protection & 1) != 0 && accessMode == O_WRONLY) return failed(GuestAccess);
     if (kind == GuestShared && (protection & 2) != 0 && accessMode == O_RDONLY) return failed(GuestAccess);
+    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor)) return failed(GuestNotSupported);
 #else
     const int mappingDescriptor = descriptor;
+    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor)) return failed(GuestNotSupported);
 #endif
     const std::size_t alignment = (flags & GuestAlignedSuper) != 0 ? SuperpageSize : PS5_PAGE_SIZE;
-    if (!File::IsSharedMemoryDescriptor_nid_no_patch(mappingDescriptor)) {
-#ifndef _WIN32
-        if (placement == 0 && (kind == GuestPrivate || (protection & 2) == 0)) {
-            try {
-                int error = 0;
-                void* copy = MapFileCopy(rounded, protection, mappingDescriptor, offset, alignment, error);
-                return copy != nullptr ? copy : failed(error);
-            } catch (const std::exception&) {
-                return failed(GuestNoMemory);
-            }
-        }
-#endif
-        return failed(GuestNotSupported);
-    }
     void* mapped = nullptr;
     try {
         mapped = address;
