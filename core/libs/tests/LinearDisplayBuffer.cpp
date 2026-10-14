@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <tuple>
+#include <vector>
 
 static void Require(bool condition) { if (!condition) std::abort(); }
 template<typename TAction> static void Reject(TAction action) {
@@ -86,6 +87,40 @@ static void HalfFloatDisplay() {
     }
 }
 
+static void Ps4TiledDisplay() {
+    AgcDriver::DisplayBuffer buffer{32768, 0x8000000000000000ull, 1920, 1080, AgcDriver::DisplayTilingPs4Display2dThin, 1920};
+    const auto size = AgcDriver::DisplayBufferSize(buffer);
+    Require(size == 8355840);
+    std::vector<bool> used(size / 4);
+    std::vector<std::byte> tiled(size);
+    for (std::uint32_t y = 0; y < buffer.height; ++y) {
+        for (std::uint32_t x = 0; x < buffer.width; ++x) {
+            const auto offset = AgcDriver::DisplayBufferOffset(buffer, x, y);
+            Require(offset % 4 == 0 && offset < size && !used[offset / 4]);
+            used[offset / 4] = true;
+            const std::uint32_t texel = (y << 12u | x) << 8u | 0xffu;
+            std::memcpy(tiled.data() + offset, &texel, sizeof(texel));
+        }
+    }
+    Require(AgcDriver::DisplayBufferOffset(buffer, 1, 0) == 4 && AgcDriver::DisplayBufferOffset(buffer, 0, 1) == 16 && AgcDriver::DisplayBufferOffset(buffer, 8, 0) == 256);
+    const auto pixels = AgcDriver::DecodeDisplayBuffer(buffer, tiled);
+    for (std::uint32_t y = 0; y < buffer.height; y += 7) {
+        for (std::uint32_t x = 0; x < buffer.width; x += 5) {
+            std::uint32_t texel = 0;
+            std::memcpy(&texel, pixels.data() + (static_cast<std::size_t>(y) * buffer.width + x) * 4, sizeof(texel));
+            Require(texel == ((y << 12u | x) << 8u | 0xffu));
+        }
+    }
+    buffer.address = 16384;
+    Reject([&] { AgcDriver::DisplayBufferSize(buffer); });
+    buffer.address = 32768;
+    buffer.pitchInPixel = 1984;
+    Reject([&] { AgcDriver::DisplayBufferSize(buffer); });
+    buffer.pitchInPixel = 1920;
+    buffer.pixelFormat = 0xc001000622000000ull;
+    Reject([&] { AgcDriver::DisplayBufferSize(buffer); });
+}
+
 int main() {
     AgcDriver::DisplayBuffer buffer{65536, 0x8000000000000000ull, 2, 2, 1, 3};
     const std::array<unsigned char, 24> input{1,2,3,4, 5,6,7,8, 99,99,99,99,
@@ -104,10 +139,11 @@ int main() {
     Reject([&] { AgcDriver::DisplayBufferSize(buffer); });
     buffer.pitchInPixel = 0;
     Require(AgcDriver::DisplayBufferSize(buffer) == 16);
-    buffer.tilingMode = 2;
+    buffer.tilingMode = 3;
     Reject([&] { AgcDriver::DisplayBufferSize(buffer); });
     buffer.tilingMode = 0;
     Require(AgcDriver::DisplayBufferSize(buffer) == 65536);
     HalfFloatCodes();
     HalfFloatDisplay();
+    Ps4TiledDisplay();
 }

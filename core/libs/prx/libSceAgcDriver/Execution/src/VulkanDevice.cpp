@@ -2612,7 +2612,7 @@ bool VulkanDevice::PresentDisplayBuffer(const DisplayBuffer& buffer) {
     if (storeAtFlip) Graphics::StorageTexture::FlushAllPending("flip");
     else Graphics::StorageTexture::FlushDumpSelected("flip");
     auto& dumps = Dumps();
-    if (buffer.tilingMode == 1) {
+    if (buffer.tilingMode != 0) {
         const auto pixels = ReadDisplayBuffer(buffer);
         bool dumpFrame = false;
         if (dumps.dumped < dumps.limit && ++dumps.presents % static_cast<std::uint64_t>(dumps.every) == 0) {
@@ -2961,7 +2961,7 @@ VulkanDevice::PresentStatistics VulkanDevice::PresentCounts() {
 
 bool VulkanDevice::PresentWaitsForSlots(const DisplayBuffer* buffer) const {
     if (buffer == nullptr || !state->SharedSlotInFlight()) return false;
-    if (buffer->tilingMode == 1) return true;
+    if (buffer->tilingMode != 0) return true;
     if (NoResidentPresent()) return true;
     VkFilter filter = VK_FILTER_LINEAR;
     bool pending = false;

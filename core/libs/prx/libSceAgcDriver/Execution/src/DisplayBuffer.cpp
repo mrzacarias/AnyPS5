@@ -38,7 +38,16 @@ std::uint32_t tileOffset64(std::uint32_t x, std::uint32_t y) {
     return ((x << 3u) & 0x0008u) ^ ((x << 4u) & 0x0460u) ^ ((x << 5u) & 0x0300u) ^ ((x << 6u) & 0x0800u) ^ ((x << 9u) & 0x8000u) ^ ((x << 10u) & 0x2000u) ^ ((y << 4u) & 0x0010u) ^ ((y << 6u) & 0x0080u) ^ ((y << 5u) & 0x0f00u) ^ ((y << 10u) & 0x5000u);
 }
 
+std::size_t ps4Display2dThinOffset(std::uint32_t x, std::uint32_t y, std::uint32_t pitch) {
+    const std::uint32_t element = (x & 1u) | ((x >> 1u) & 1u) << 1u | (y & 1u) << 2u | ((x >> 2u) & 1u) << 3u | ((y >> 1u) & 1u) << 4u | ((y >> 2u) & 1u) << 5u;
+    const std::uint32_t pipe = (((x >> 3u) ^ (y >> 3u) ^ (x >> 4u)) & 1u) | (((x >> 4u) ^ (y >> 4u)) & 1u) << 1u | (((x >> 5u) ^ (y >> 5u)) & 1u) << 2u;
+    const std::uint32_t bank = (((x >> 6u) ^ (y >> 6u)) & 1u) | (((x >> 7u) ^ (y >> 5u) ^ (y >> 6u)) & 1u) << 1u | (((x >> 8u) ^ (y >> 4u)) & 1u) << 2u | (((x >> 9u) ^ (y >> 3u)) & 1u) << 3u;
+    const std::size_t macroTile = static_cast<std::size_t>(y / 64u) * (pitch / 128u) + x / 128u;
+    return element * 4u | static_cast<std::size_t>(pipe) << 8u | static_cast<std::size_t>(bank) << 11u | macroTile << 15u;
+}
+
 std::size_t texelOffset(const DisplayBuffer& buffer, std::uint32_t x, std::uint32_t y, std::uint32_t texelBytes) {
+    if (buffer.tilingMode == DisplayTilingPs4Display2dThin) return ps4Display2dThinOffset(x, y, buffer.pitchInPixel == 0 ? buffer.width : buffer.pitchInPixel);
     if (buffer.tilingMode == 1) {
         const auto pitch = buffer.pitchInPixel == 0 ? buffer.width : buffer.pitchInPixel;
         return (static_cast<std::size_t>(y) * pitch + x) * texelBytes;
@@ -114,7 +123,7 @@ void traceDisplayKeys(const DisplayBuffer& buffer, const std::uint8_t* keys, std
 }
 
 std::size_t DisplayBufferAlignment(const DisplayBuffer& buffer) {
-    return buffer.tilingMode == 1 ? 4096u : 65536u;
+    return buffer.tilingMode == 1 ? 4096u : buffer.tilingMode == DisplayTilingPs4Display2dThin ? 32768u : 65536u;
 }
 
 std::size_t DisplayBufferSize(const DisplayBuffer& buffer) {
@@ -126,16 +135,18 @@ std::size_t DisplayBufferSize(const DisplayBuffer& buffer) {
         throw std::runtime_error(message);
     }
     require(!halfFloat || buffer.dccAddress == 0, "VideoOut: DCC metadata on a 16-bit float display buffer is not implemented");
-    require(buffer.tilingMode <= 1, "VideoOut: unsupported display tiling mode");
-    require(buffer.address != 0 && buffer.address % DisplayBufferAlignment(buffer) == 0, buffer.tilingMode == 1 ? "VideoOut: linear display buffer requires 4 KiB alignment" : "VideoOut: display buffer requires 64 KiB alignment");
+    require(buffer.tilingMode <= DisplayTilingPs4Display2dThin, "VideoOut: unsupported display tiling mode");
+    require(buffer.address != 0 && buffer.address % DisplayBufferAlignment(buffer) == 0, buffer.tilingMode == 1 ? "VideoOut: linear display buffer requires 4 KiB alignment" : buffer.tilingMode == DisplayTilingPs4Display2dThin ? "VideoOut: PS4 tiled display buffer requires 32 KiB alignment" : "VideoOut: display buffer requires 64 KiB alignment");
     require(buffer.tilingMode != 0 || buffer.pitchInPixel == 0, "VideoOut: tiled display pitch is unsupported");
     require(buffer.dccAddress == 0 || buffer.tilingMode == 0, "VideoOut: a linear display buffer cannot carry DCC metadata");
     require(buffer.dccAddress != 0 || buffer.dccClearColor == 0, "VideoOut: a DCC clear color needs DCC metadata");
     const auto pitch = buffer.pitchInPixel == 0 ? buffer.width : buffer.pitchInPixel;
     require(pitch >= buffer.width && pitch <= 16384, "VideoOut: invalid linear display pitch");
     const auto texelBytes = DisplayTexelBytes(buffer.pixelFormat);
+    require(buffer.tilingMode != DisplayTilingPs4Display2dThin || (texelBytes == 4 && pitch % 128u == 0), "VideoOut: PS4 tiled display buffers are implemented for 32-bit texels and a pitch of whole 128-pixel macro tiles only");
     const auto blockHeight = 65536u / 128u / texelBytes;
     const auto size = buffer.tilingMode == 1 ? static_cast<std::uint64_t>(pitch) * buffer.height * texelBytes
+        : buffer.tilingMode == DisplayTilingPs4Display2dThin ? static_cast<std::uint64_t>(pitch) * ((buffer.height + 63u) / 64u * 64u) * texelBytes
         : static_cast<std::uint64_t>((buffer.width + 127u) / 128u) * ((buffer.height + blockHeight - 1u) / blockHeight) * 65536u;
     require(size <= std::numeric_limits<std::size_t>::max() && size <= std::numeric_limits<std::uintptr_t>::max() - buffer.address, "VideoOut: display buffer range overflow");
     return static_cast<std::size_t>(size);
@@ -170,6 +181,7 @@ std::vector<std::byte> DecodeDisplayBuffer(const DisplayBuffer& buffer, std::spa
         for (std::uint32_t x = 0; x < buffer.width; ++x) {
             const auto pitch = buffer.pitchInPixel == 0 ? buffer.width : buffer.pitchInPixel;
             const auto tiled = buffer.tilingMode == 1 ? (static_cast<std::size_t>(y) * pitch + x) * 4u
+                : buffer.tilingMode == DisplayTilingPs4Display2dThin ? ps4Display2dThinOffset(x, y, pitch)
                 : (static_cast<std::size_t>(y / 128u) * blocksPerRow + x / 128u) * 65536u + tileOffset(x, y);
             const auto linear = (static_cast<std::size_t>(y) * buffer.width + x) * 4;
             decodeTexel(source.data() + tiled, pixels.data() + linear, rgba, tenBit);

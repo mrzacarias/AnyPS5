@@ -13,6 +13,8 @@ namespace Graphics {
 enum class DccKeys;
 }
 
+inline constexpr std::uint32_t DisplayTilingPs4Display2dThin = 2;
+
 struct DisplayBuffer {
     std::uint64_t address;
     std::uint64_t pixelFormat;
