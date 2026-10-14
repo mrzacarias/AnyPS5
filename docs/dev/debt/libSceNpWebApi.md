@@ -1,24 +1,9 @@
 # libSceNpWebApi technical debt
 
+### Silent stubs
+
+- [libSceNpWebApi](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - the PS4 PSN web API has no service behind it, as in libSceNpWebApi2: library and user contexts, handles, requests, push event filters and callbacks get ids, deletions succeed, and every request answers `SCE_NP_WEBAPI_ERROR_NOT_SIGNED_IN` (0x80552907) when sent or read. A push event filter for a named NP service answers `SCE_NP_WEBAPI_ERROR_SIGNED_IN_USER_NOT_FOUND` (0x80552910), as [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/9dada49956b53aa0fb8dcc9ca81db53ff817e122/src/core/libraries/np/np_web_api/np_web_api_internal.cpp) does offline. Signatures and error codes follow shadPS4
+
 ### Unknown function info
 
-- [sceNpWebApiGetMemoryPoolStats](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiDeleteHandle](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiGetHttpResponseHeaderValueLength](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiCreateHandle](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiReadData](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiInitialize](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiAbortRequest](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiSendRequest2](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiCreateExtdPushEventFilter](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiUnregisterExtdPushEventCallback](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiGetHttpResponseHeaderValue](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiDeleteContext](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiTerminate](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiRegisterExtdPushEventCallbackA](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiAddHttpRequestHeader](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiDeleteRequest](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
 - [sceNpWebApiUtilityParseNpId](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiDeleteExtdPushEventFilter](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiCreateRequest](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
-- [sceNpWebApiCreateContextA](../../../core/libs/prx/libSceNpWebApi/Export.cpp) (libSceNpWebApi) - unknown signature
