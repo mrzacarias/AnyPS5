@@ -8,6 +8,7 @@
 #include "prx/libSceAgcDriver/Execution/include/ThreadPriority.hpp"
 #include "ThreadOwned.hpp"
 #include "prx/libc/include/HostThreadLocal.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include <bit>
 #include <cstdio>
 #include <cstdlib>
@@ -117,6 +118,12 @@ bool Driver::copySegment(Submission& submission, const std::uint32_t* guest, std
                 return true;
             }
             if (chain) return false;
+            cursor += count;
+            continue;
+        }
+        if (opcode == 0x47u && count == 6 && ApplicationIsPs4_nid_no_patch()) {
+            const auto releaseMem = Pm4::ReleaseMemFromEndOfPipe(std::span(guest + cursor, count));
+            submission.commands.insert(submission.commands.end(), releaseMem.begin(), releaseMem.end());
             cursor += count;
             continue;
         }

@@ -60,6 +60,10 @@ extern "C" void AgcDriverRaiseWorkerThreadPriority_nid_postfix(const char* role)
     AgcDriver::RaiseWorkerThreadPriority(role);
 }
 
+extern "C" void AgcDriverSubmit_nid_postfix(const Packet* packet, std::uint32_t queue) {
+    AgcDriver::Submit(packet, queue);
+}
+
 extern "C" void AgcDriverWaitIdle_nid_postfix() try {
     AgcDriver::WaitIdle();
 } catch (const ProcessShutdown&) {

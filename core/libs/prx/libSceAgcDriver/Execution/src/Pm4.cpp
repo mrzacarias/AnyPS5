@@ -1,6 +1,7 @@
 #include "prx/libSceAgcDriver/Execution/include/Pm4.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/PreciseWait.hpp"
 #include <algorithm>
 #include <thread>
@@ -246,7 +247,11 @@ void Validate(std::span<const std::uint32_t> packet, std::uint32_t queue) {
         require((header & 3u) == 0, "unsupported NOP header flags");
         switch ((header >> 2u) & 0x3fu) {
             case 0:
-                require((packet[1] & 0xffff0000u) != 0x68750000u, "typed user-data and legacy flip markers are not implemented");
+                if ((packet[1] & 0xffff0000u) == 0x68750000u && !ApplicationIsPs4_nid_no_patch()) {
+                    char message[96];
+                    std::snprintf(message, sizeof(message), "typed user-data and legacy flip markers are not implemented (0x%08x)", packet[1]);
+                    throw std::runtime_error(message);
+                }
                 break;
             case 0x09: size(2); break;
             case 0x06: size(4); require(packet[3] == 0, "unsupported rendering wait mode"); break;
@@ -826,6 +831,15 @@ void ExecuteIndirectRegisters(std::span<const std::uint32_t> packet, std::span<c
         for (std::size_t i = 0; i < pairs.size(); i += 2) std::fprintf(stderr, " %x", registerOffset(pairs[i]));
         std::fprintf(stderr, "\n");
     }
+}
+
+std::array<std::uint32_t, 8> ReleaseMemFromEndOfPipe(std::span<const std::uint32_t> packet) {
+    require(packet.size() == 6, "invalid EVENT_WRITE_EOP size");
+    auto dataSelect = packet[3] >> 29u;
+    require(dataSelect <= 4, "EVENT_WRITE_EOP data select is not implemented");
+    if (dataSelect == 4) dataSelect = 3;
+    const auto interruptSelect = (packet[3] >> 24u) & 3u;
+    return {0xc0064900u | (packet[0] & 3u), packet[1] & 0xfffu, interruptSelect << 24u | dataSelect << 29u, packet[2], packet[3] & 0xffffu, packet[4], packet[5], 0u};
 }
 
 void Execute(std::span<const std::uint32_t> packet, QueueState& queue) {
