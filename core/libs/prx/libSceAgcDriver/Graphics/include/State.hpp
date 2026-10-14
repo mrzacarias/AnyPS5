@@ -49,6 +49,9 @@ struct ColorTarget {
     std::uint64_t cmaskAddress = 0;
     std::size_t cmaskBytes = 0;
     bool cmaskFastClear = false;
+    // A PS4 (GFX7) CMASK, whose size comes from CB_COLOR_CMASK_SLICE and whose tile order is not modeled: only a
+    // CMASK that is cleared or expanded as a whole is read.
+    bool ps4Cmask = false;
     std::uint64_t surfaceAddress = 0;
     VkExtent2D surfaceExtent{};
     std::uint32_t mipCount = 1;
@@ -139,6 +142,8 @@ std::array<ShaderRecompiler::ColorExportPacking, 8> ExportPackings(const State& 
 ShaderRecompiler::RasterPrimitive RasterPrimitiveOf(const State& state);
 ColorTarget DecodeColorBuffer(const Registers& context, std::uint32_t slot);
 std::size_t CmaskBytes(std::uint32_t width, std::uint32_t height);
+// A PS4 CMASK only keeps the 256-byte alignment of its CB_COLOR_CMASK address.
+std::size_t CmaskAlignment(const ColorTarget& color);
 std::uint32_t ColorWriteMask(const Registers& context);
 GuestTextureResource SurfaceForTarget(const ColorTarget& color);
 

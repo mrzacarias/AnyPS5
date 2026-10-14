@@ -1006,6 +1006,10 @@ std::size_t CmaskBytes(std::uint32_t width, std::uint32_t height) {
     return CmaskLayout(width, height).Bytes();
 }
 
+std::size_t CmaskAlignment(const ColorTarget& color) {
+    return color.ps4Cmask ? 256u : CmaskLayout::Alignment;
+}
+
 std::uint32_t ColorWriteMask(const Registers& context) {
     auto mask = read(context, 0x8e) & read(context, 0x8f);
     for (std::uint32_t slot = 0; slot < 8; ++slot) {
@@ -1151,15 +1155,18 @@ ColorTarget DecodeColorBuffer(const Registers& cx, std::uint32_t slot) {
     }
     if ((info & 0x2000u) != 0 || (color.samples > 1 && (info & 0x4000u) != 0)) {
         Require(color.samples > 1 || (maxMip == 0 && !volume && slice == 0), "CMASK fast clears of a mipmapped, 3D or array color target are unsupported");
-        Require(((attrib3 >> 19u) & 0x1fu) == 0x18u && (attrib3 & 0x4000000u) != 0, "CMASK fast clears need pipe-aligned SW_64KB_Z_X metadata (CB_COLOR_ATTRIB3 FMASK_SW_MODE 24, CMASK_PIPE_ALIGNED)");
+        color.ps4Cmask = ShaderRecompiler::GcnShaderCode();
+        Require(color.ps4Cmask || (((attrib3 >> 19u) & 0x1fu) == 0x18u && (attrib3 & 0x4000000u) != 0), "CMASK fast clears need pipe-aligned SW_64KB_Z_X metadata (CB_COLOR_ATTRIB3 FMASK_SW_MODE 24, CMASK_PIPE_ALIGNED)");
+        Require(!color.ps4Cmask || color.samples == 1, "PS4 CMASK fast clears of multisampled color targets are unsupported");
         if (color.samples == 1) Require(color.elementBytes <= 8, "CMASK fast clears of texels over 64 bits are unsupported");
         const auto cmaskHigh = find(cx, 0x398 + slot);
         const auto cmask = ((cmaskHigh == cx.end() ? 0ull : static_cast<std::uint64_t>(cmaskHigh->second & 0xffu)) << 40u) | (static_cast<std::uint64_t>(read(cx, 0x31f + stride)) << 8u);
         Require((info & 0x2000u) == 0 || cmask != 0, "CMASK fast clears without a CMASK address are unsupported");
         if (cmask != 0) {
             color.cmaskAddress = cmask;
-            color.cmaskBytes = CmaskBytes(color.extent.width, color.extent.height);
-            if (color.samples == 1) GuestMemory::CheckRange(reinterpret_cast<const void*>(color.cmaskAddress), color.cmaskBytes, CmaskLayout::Alignment, true);
+            // A PS4 CMASK slice has 128 bytes for each 128x128 block (CB_COLOR_CMASK_SLICE TILE_MAX, minus one).
+            color.cmaskBytes = color.ps4Cmask ? ((read(cx, 0x320 + stride) & 0x3fffu) + 1u) * 128u : CmaskBytes(color.extent.width, color.extent.height);
+            if (color.samples == 1) GuestMemory::CheckRange(reinterpret_cast<const void*>(color.cmaskAddress), color.cmaskBytes, CmaskAlignment(color), true);
         }
         color.cmaskFastClear = (info & 0x2000u) != 0;
     }
@@ -1217,7 +1224,8 @@ std::optional<ColorMetadataPass> DecodeColorMetadataPass(const QueueState& queue
         const auto height = static_cast<float>(target.extent.height);
         const bool viewportCovers = xo - xs <= 0.0f && xo + xs >= width && yo - ys <= 0.0f && yo + ys >= height;
         const bool scissorCovers = covered.offset.x == 0 && covered.offset.y == 0 && covered.extent.width >= target.extent.width && covered.extent.height >= target.extent.height;
-        Require(viewportCovers && scissorCovers, "CB metadata pass over part of a color target");
+        // PS4 color targets only give their padded pitch and slice size, which a pass over the whole image leaves out.
+        Require((viewportCovers && scissorCovers) || ShaderRecompiler::GcnShaderCode(), "CB metadata pass over part of a color target");
     };
     if (resolve) {
         const auto source = DecodeColorBuffer(cx, 0);
