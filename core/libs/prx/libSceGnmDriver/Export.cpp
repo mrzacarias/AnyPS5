@@ -14,25 +14,13 @@ static constexpr int SCE_GNM_ERROR_FAILURE = static_cast<int>(0x8EEE00FF);
 
 extern "C" {
 
-int APS5_VABI sceGnmSetEmbeddedVsShader(void) {
-    NotImplemented_nid_no_patch("+AFvOEXrKJk");
-    return 0;
-}
 
 int APS5_VABI sceGnmSetupMipStatsReport(void) {
     NotImplemented_nid_no_patch("+xuDhxlWRPg");
     return 0;
 }
 
-int APS5_VABI sceGnmDispatchDirect(void) {
-    NotImplemented_nid_no_patch("0BzLGljcwBo");
-    return 0;
-}
 
-int APS5_VABI sceGnmInsertWaitFlipDone(void) {
-    NotImplemented_nid_no_patch("1qXLHIpROPE");
-    return 0;
-}
 
 int APS5_VABI sceGnmLogicalCuIndexToPhysicalCuIndex(void) {
     NotImplemented_nid_no_patch("26PM5Mzl8zc");
@@ -54,20 +42,12 @@ int APS5_VABI sceGnmGetResourceBaseAddressAndSizeInBytes(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndirect(void) {
-    NotImplemented_nid_no_patch("4v+otIIdjqg");
-    return 0;
-}
 
 int APS5_VABI sceGnmValidateGetDiagnostics(void) {
     NotImplemented_nid_no_patch("5SHGNwLXBV4");
     return 0;
 }
 
-int APS5_VABI sceGnmSetPsShader350(void) {
-    NotImplemented_nid_no_patch("5uFKckiJYRM");
-    return 0;
-}
 
 int APS5_VABI sceGnmCreateWorkloadStream(std::uint64_t name, std::uint32_t* workloadStream) {
     if (name == 0 || workloadStream == nullptr) return 3;
@@ -84,10 +64,6 @@ int APS5_VABI sceGnmRequestFlipAndSubmitDoneForWorkload(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmInsertPopMarker(void) {
-    NotImplemented_nid_no_patch("7qZVNgEu+SY");
-    return 0;
-}
 
 int APS5_VABI sceGnmRegisterGdsResource(void) {
     return SCE_GNM_ERROR_FAILURE;
@@ -108,10 +84,6 @@ int APS5_VABI sceGnmValidateDisableDiagnostics2(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexIndirect(void) {
-    NotImplemented_nid_no_patch("ED9-Fjr8Ta4");
-    return 0;
-}
 
 int APS5_VABI sceGnmComputeWaitSemaphore(void) {
     NotImplemented_nid_no_patch("EJapNl2+pgU");
@@ -122,10 +94,6 @@ std::uint32_t APS5_VABI sceGnmGetOffChipTessellationBufferSize(void) {
     return 0x800000u;
 }
 
-int APS5_VABI sceGnmSetEsShader(void) {
-    NotImplemented_nid_no_patch("FUHG8sQ3R58");
-    return 0;
-}
 
 int APS5_VABI sceGnmEndWorkload(std::uint64_t workload) {
     if (workload == 0) return 2;
@@ -136,20 +104,8 @@ std::uint32_t APS5_VABI sceGnmGetGpuCoreClockFrequency(void) {
     return 800000000u;
 }
 
-int APS5_VABI sceGnmDrawIndexAuto(void) {
-    NotImplemented_nid_no_patch("GGsn7jMTxw4");
-    return 0;
-}
 
-int APS5_VABI sceGnmUpdateHsShader(void) {
-    NotImplemented_nid_no_patch("GNlx+y7xPdE");
-    return 0;
-}
 
-int APS5_VABI sceGnmSubmitAndFlipCommandBuffersForWorkload(void) {
-    NotImplemented_nid_no_patch("Ga6r7H6Y0RI");
-    return 0;
-}
 
 int APS5_VABI sceGnmGetEqTimeStamp(void) {
     NotImplemented_nid_no_patch("H7-fgvEutM0");
@@ -161,10 +117,6 @@ int APS5_VABI sceGnmDisableMipStatsReport(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndex(void) {
-    NotImplemented_nid_no_patch("HlTPoZ-oY7Y");
-    return 0;
-}
 
 int APS5_VABI sceGnmValidateGetVersion(void) {
     return 0;
@@ -185,25 +137,13 @@ int APS5_VABI sceGnmGetNumTcaUnits(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmSetCsShaderWithModifier(void) {
-    NotImplemented_nid_no_patch("Kx-h-nWQJ8A");
-    return 0;
-}
 
 int APS5_VABI sceGnmValidateResetState(void) {
     NotImplemented_nid_no_patch("MBMa6EFu4Ko");
     return 0;
 }
 
-int APS5_VABI sceGnmResetVgtControl(void) {
-    NotImplemented_nid_no_patch("MYRtYhojKdA");
-    return 0;
-}
 
-int APS5_VABI sceGnmInsertDingDongMarker(void) {
-    NotImplemented_nid_no_patch("NfvOrNzy6sk");
-    return 0;
-}
 
 int APS5_VABI sceGnmGetResourceName(void) {
     NotImplemented_nid_no_patch("O0S96YnD04U");
@@ -253,10 +193,6 @@ int APS5_VABI sceGnmGetResourceShaderGuid(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmSetGsShader(void) {
-    NotImplemented_nid_no_patch("UJwNuMBcUAk");
-    return 0;
-}
 
 int APS5_VABI sceGnmGetResourceUserData(void) {
     NotImplemented_nid_no_patch("UoBuWAhKk7U");
@@ -273,44 +209,20 @@ int APS5_VABI sceGnmDestroyWorkloadStream(std::uint32_t workloadStream) {
     return 0;
 }
 
-int APS5_VABI sceGnmUpdateVsShader(void) {
-    NotImplemented_nid_no_patch("V31V01UiScY");
-    return 0;
-}
 
-int APS5_VABI sceGnmSetHsShader(void) {
-    NotImplemented_nid_no_patch("VJNjFtqiF5w");
-    return 0;
-}
 
-int APS5_VABI sceGnmInsertPushMarker(void) {
-    NotImplemented_nid_no_patch("W1Etj-jlW7Y");
-    return 0;
-}
 
-int APS5_VABI sceGnmSetEmbeddedPsShader(void) {
-    NotImplemented_nid_no_patch("X9Omw9dwv5M");
-    return 0;
-}
 
 int APS5_VABI sceGnmSetWaveLimitMultipliers(void) {
     NotImplemented_nid_no_patch("XiyzNZ9J4nQ");
     return 0;
 }
 
-int APS5_VABI sceGnmDispatchIndirect(void) {
-    NotImplemented_nid_no_patch("Z43vKp5k7r0");
-    return 0;
-}
 
 int APS5_VABI sceGnmRegisterOwner(void) {
     return SCE_GNM_ERROR_FAILURE;
 }
 
-int APS5_VABI sceGnmInsertPushColorMarker(void) {
-    NotImplemented_nid_no_patch("aPIZJTXC+cU");
-    return 0;
-}
 
 int APS5_VABI sceGnmInsertSetColorMarker(void) {
     NotImplemented_nid_no_patch("aj3L-iaFmyk");
@@ -341,10 +253,6 @@ int APS5_VABI sceGnmDingDongForWorkload(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmSetVgtControl(void) {
-    NotImplemented_nid_no_patch("cFCp0NX8wf0");
-    return 0;
-}
 
 int APS5_VABI sceGnmDrawIndirectCountMulti(void) {
     NotImplemented_nid_no_patch("cUCo8OvArrw");
@@ -384,10 +292,6 @@ int APS5_VABI sceGnmGetProtectionFaultTimeStamp(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmSetVsShader(void) {
-    NotImplemented_nid_no_patch("gAhCn6UiU4Y");
-    return 0;
-}
 
 int APS5_VABI sceGnmRequestFlipAndSubmitDone(void) {
     NotImplemented_nid_no_patch("gObODli-OH8");
@@ -423,19 +327,11 @@ int APS5_VABI sceGnmDrawIndexMultiInstanced(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmSubmitCommandBuffersForWorkload(void) {
-    NotImplemented_nid_no_patch("jRcI8VcgTz4");
-    return 0;
-}
 
 bool APS5_VABI sceGnmIsUserPaEnabled(void) {
     return false;
 }
 
-int APS5_VABI sceGnmInsertSetMarker(void) {
-    NotImplemented_nid_no_patch("jiItzS6+22g");
-    return 0;
-}
 
 int APS5_VABI sceGnmSetGsRingSizes(void) {
     NotImplemented_nid_no_patch("jtkqXpAOY6w");
@@ -455,10 +351,6 @@ std::uintptr_t APS5_VABI sceGnmGetTheTessellationFactorRingBufferBaseAddress(voi
     return AgcDriverTessellationFactorRingBase_nid_postfix();
 }
 
-int APS5_VABI sceGnmUpdatePsShader350(void) {
-    NotImplemented_nid_no_patch("mLVL7N7BVBg");
-    return 0;
-}
 
 int APS5_VABI sceGnmGetShaderProgramBaseAddress(void) {
     NotImplemented_nid_no_patch("nEyFbYUloIM");
@@ -466,10 +358,6 @@ int APS5_VABI sceGnmGetShaderProgramBaseAddress(void) {
 }
 
 
-int APS5_VABI sceGnmUpdateGsShader(void) {
-    NotImplemented_nid_no_patch("nLM2i2+65hA");
-    return 0;
-}
 
 int APS5_VABI sceGnmRegisterResource(void) {
     return SCE_GNM_ERROR_FAILURE;
@@ -480,10 +368,6 @@ int APS5_VABI sceGnmGetGpuBlockStatus(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmDrawIndexOffset(void) {
-    NotImplemented_nid_no_patch("oYM+YzfCm2Y");
-    return 0;
-}
 
 int APS5_VABI sceGnmSetResourceRegistrationUserMemory(void) {
     return SCE_GNM_ERROR_FAILURE;
@@ -523,34 +407,18 @@ int APS5_VABI sceRazorCaptureImmediate(void) {
     return 0;
 }
 
-int APS5_VABI sceGnmSetLsShader(void) {
-    NotImplemented_nid_no_patch("vckdzbQ46SI");
-    return 0;
-}
 
 int APS5_VABI sceGnmDispatchIndirectOnMec(void) {
     NotImplemented_nid_no_patch("wED4ZXCFJT0");
     return 0;
 }
 
-int APS5_VABI sceGnmSubmitAndFlipCommandBuffers(void) {
-    NotImplemented_nid_no_patch("xbxNatawohc");
-    return 0;
-}
 
 
 int APS5_VABI sceGnmUnregisterAllResourcesForOwner(void) {
     return SCE_GNM_ERROR_FAILURE;
 }
 
-int APS5_VABI sceGnmSubmitDone(void) {
-    NotImplemented_nid_no_patch("yvZ73uQUqrk");
-    return 0;
-}
 
-int APS5_VABI sceGnmSubmitCommandBuffers(void) {
-    NotImplemented_nid_no_patch("zwY0YV91TTI");
-    return 0;
-}
 
 }
