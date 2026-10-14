@@ -7,8 +7,8 @@
 namespace AgcDriver {
 
 // Stores a PS4 (GFX7) context register write in the GFX10 layout the graphics state decodes, with the GFX10
-// registers that PS4 spreads over other registers.
-void WritePs4ContextRegister(Registers& context, std::uint32_t offset, std::uint32_t value);
+// registers that PS4 spreads over other registers and the user config registers GFX10 moved out of the context.
+void WritePs4ContextRegister(Registers& context, Registers& userConfig, std::uint32_t offset, std::uint32_t value);
 
 }
 

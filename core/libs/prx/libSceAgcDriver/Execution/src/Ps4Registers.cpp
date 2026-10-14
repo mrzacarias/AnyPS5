@@ -27,12 +27,20 @@ std::uint32_t read(const Registers& context, std::uint32_t offset) {
 
 }
 
-void WritePs4ContextRegister(Registers& context, std::uint32_t offset, std::uint32_t value) {
+void WritePs4ContextRegister(Registers& context, Registers& userConfig, std::uint32_t offset, std::uint32_t value) {
     if (offset == 0x016) {
         // DB_DEPTH_SIZE holds the pitch and height in 8-pixel tiles, minus one; DB_DEPTH_SIZE_XY the last x and y.
         const auto width = ((value & 0x7ffu) + 1u) * 8u;
         const auto height = (((value >> 11u) & 0x7ffu) + 1u) * 8u;
         context.insert_or_assign(0x007, (width - 1u) | ((height - 1u) << 16u));
+    }
+    // GFX7 keeps the base vertex (VGT_INDX_OFFSET) and the primitive restart enable (VGT_MULTI_PRIM_IB_RESET_EN) in
+    // context registers; GFX10 moved them to GE_INDX_OFFSET and GE_MULTI_PRIM_IB_RESET_EN.
+    if (offset == 0x102) userConfig.insert_or_assign(0x24a, value);
+    if (offset == 0x2a5) userConfig.insert_or_assign(0x24b, value & 1u);
+    if (offset == 0x010) {
+        // DB_Z_INFO without TILE_SURFACE_ENABLE: the PS4 HTILE has the GFX7 layout, which the depth state does not read.
+        value &= ~(1u << 29u);
     }
     if (offset < ColorBase || offset >= ColorBase + ColorTargets * ColorStride) {
         context.insert_or_assign(offset, value);
