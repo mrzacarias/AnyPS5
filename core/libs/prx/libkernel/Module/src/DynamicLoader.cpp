@@ -43,6 +43,7 @@ struct Module {
     bool owned = true;
     bool global = false;
     bool guest = false;
+    void* guestMain = nullptr;
     ~Module() {
         if (owned && native) {
 #ifdef _WIN32
@@ -60,6 +61,9 @@ std::map<const void*, std::uintptr_t> imageIds;
 void* Symbol(Module& module, const char* name) {
 #if defined(__APPLE__) && defined(__aarch64__)
     if (module.guest) return guestSymbol(module.native, name);
+    if (module.guestMain != nullptr) {
+        if (void* symbol = guestSymbol(module.guestMain, name)) return symbol;
+    }
 #endif
 #ifdef _WIN32
     return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(module.native), name));
@@ -217,6 +221,7 @@ void* APS5_VABI dlopen_nid_postfix(const char* path, int flags) {
                 module->owned = false;
             }
         }
+        if (!path && guestOpen) module->guestMain = guestOpen(nullptr);
         if (!module->guest)
 #endif
         module->native = ::dlopen(path ? resolved.c_str() : nullptr, nativeFlags);

@@ -23,6 +23,7 @@ std::uint64_t AlignUp(std::uint64_t value, std::uint64_t alignment) {
 GuestProgram* loadedProgram = nullptr;
 
 void* OpenGuestModule(const char* path) {
+    if (path == nullptr) return loadedProgram->Images().empty() ? nullptr : loadedProgram->Images().front().get();
     std::error_code error;
     const auto canonical = std::filesystem::weakly_canonical(path, error);
     if (error) return nullptr;
