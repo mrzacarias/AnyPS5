@@ -121,13 +121,13 @@ bool Driver::copySegment(Submission& submission, const std::uint32_t* guest, std
             cursor += count;
             continue;
         }
-        if (opcode == 0x50u && ApplicationIsPs4_nid_no_patch() && Pm4::Ps4L2Prefetch(std::span(guest + cursor, count))) {
+        if (opcode == 0x50u && Pm4::Ps4L2Prefetch(std::span(guest + cursor, count)) && ApplicationIsPs4_nid_no_patch()) {
             submission.commands.push_back(0xc0001000u | static_cast<std::uint32_t>(count - 2) << 16u);
             submission.commands.insert(submission.commands.end(), count - 1, 0u);
             cursor += count;
             continue;
         }
-        if (opcode == 0x48u && ApplicationIsPs4_nid_no_patch() && Pm4::EndOfShaderFence(std::span(guest + cursor, count))) {
+        if (opcode == 0x48u && Pm4::EndOfShaderFence(std::span(guest + cursor, count)) && ApplicationIsPs4_nid_no_patch()) {
             const auto releaseMem = Pm4::ReleaseMemFromEndOfShader(std::span(guest + cursor, count));
             submission.commands.insert(submission.commands.end(), releaseMem.begin(), releaseMem.end());
             cursor += count;
