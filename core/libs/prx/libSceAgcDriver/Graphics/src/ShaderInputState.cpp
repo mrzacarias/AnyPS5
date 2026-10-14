@@ -3,6 +3,8 @@
 #include "prx/libSceAgc/Shader/include/ShaderConstants.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/State.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
+#include "RdnaDecoder/RdnaInstructionDecoder.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -175,8 +177,9 @@ ShaderRecompiler::ShaderPixelStageInfo DecodePixelStageInfo(const Registers& con
     };
 }
 
-ShaderRecompiler::ShaderVertexStageInfo DecodeVertexStageInfo(std::span<const std::byte> header, std::uint64_t headerAddress, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads, bool staticAbi, std::uint32_t hiddenUserWords) {
-    if (header.empty()) return {};
+ShaderRecompiler::ShaderVertexStageInfo DecodeVertexStageInfo(std::span<const std::byte> header, std::uint64_t headerAddress, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads, bool staticAbi, std::uint32_t hiddenUserWords, std::span<const std::uint32_t> code) {
+    // A PS4 program has no header: its fetch shader names its vertex inputs.
+    if (header.empty()) return ShaderRecompiler::GcnShaderCode() ? DecodePs4VertexStageInfo(code, userData, reads) : ShaderRecompiler::ShaderVertexStageInfo{};
     if (header.size() < sizeof(Shader)) throw std::runtime_error("AGC graphics: shader header is smaller than the fixed AGC header");
     Shader shader;
     std::memcpy(&shader, header.data(), sizeof(Shader));
@@ -262,6 +265,96 @@ ShaderRecompiler::ShaderVertexStageInfo DecodeVertexStageInfo(std::span<const st
             resource.fields[0] = static_cast<std::uint32_t>(base & 0xffffffffu);
             resource.fields[1] = (resource.fields[1] & 0xffff0000u) | static_cast<std::uint32_t>((base >> 32u) & 0xffffu);
         }
+        ++info.resourcesNum;
+    }
+    return info;
+}
+
+namespace {
+
+// A GCN (GFX7) buffer V# in the RDNA layout: the data and number formats become one RDNA format and the
+// resource level is 1.
+std::array<std::uint32_t, 4> rdnaBufferDescriptor(const std::array<std::uint32_t, 4>& gcn) {
+    if ((gcn[1] >> 30u) != 0u) throw std::runtime_error("AGC graphics: swizzled PS4 vertex buffers are unsupported");
+    const auto dataFormat = (gcn[3] >> 15u) & 0xfu;
+    const auto format = dataFormat == 0u ? 0u : ShaderRecompiler::GcnBufferFormat(dataFormat, (gcn[3] >> 12u) & 7u);
+    return {gcn[0], gcn[1], gcn[2], (gcn[3] & 0xe00fffu) | (format << 12u) | (1u << 24u)};
+}
+
+}
+
+ShaderRecompiler::ShaderVertexStageInfo DecodePs4VertexStageInfo(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads) {
+    ShaderRecompiler::ShaderVertexStageInfo info{};
+    // The program starts with scalar moves and markers, then calls the fetch shader through a user-data pair.
+    std::uint32_t pair = 0;
+    for (std::uint32_t word = 0; word < code.size();) {
+        const auto instruction = ShaderRecompiler::DecodeRdnaInstruction(word * 4u, code, word);
+        word += instruction.wordCount;
+        if (instruction.op == ShaderRecompiler::RdnaOpcode::SSwappcB64) {
+            if (instruction.source0.kind != ShaderRecompiler::RdnaOperandKind::ScalarRegister) return info;
+            pair = instruction.source0.reg;
+            break;
+        }
+        if (instruction.family != ShaderRecompiler::RdnaInstructionFamily::SOP1 && instruction.family != ShaderRecompiler::RdnaInstructionFamily::SOPP) return info;
+    }
+    if (pair + 1u >= userData.size()) return info;
+    const auto fetchAddress = static_cast<std::uint64_t>(userData[pair]) | (static_cast<std::uint64_t>(userData[pair + 1u]) << 32u);
+    if (fetchAddress == 0) return info;
+    // The recompiler inlines the call with the attributes of this plan, as for an AGC program's own fetch shader.
+    info.fetchEmbedded = true;
+    // The fetch shader loads V#s from user-data tables into scalar registers, then loads one attribute with each,
+    // indexed by the vertex index (v0) or an instance index (v1 to v3), and returns.
+    std::vector<std::uint32_t> fetch;
+    std::array<std::uint32_t, 104> scalars{};
+    std::array<bool, 104> loaded{};
+    for (std::uint32_t word = 0;;) {
+        while (fetch.size() < word + 3u) {
+            if (fetch.size() >= 1024u) throw std::runtime_error("AGC graphics: PS4 fetch shader does not return within 4 KiB");
+            std::array<std::uint32_t, 16> chunk{};
+            AgcDriver::GuestMemory::Read(fetchAddress + fetch.size() * 4u, std::as_writable_bytes(std::span(chunk)), 4);
+            fetch.insert(fetch.end(), chunk.begin(), chunk.end());
+        }
+        const auto instruction = ShaderRecompiler::DecodeRdnaInstruction(word * 4u, fetch, word);
+        word += instruction.wordCount;
+        using ShaderRecompiler::RdnaOpcode;
+        if (instruction.op == RdnaOpcode::SSetpcB64) break;
+        if (instruction.op == RdnaOpcode::SWaitcnt || instruction.op == RdnaOpcode::SNop) continue;
+        if (instruction.op == RdnaOpcode::SLoadDwordx4 || instruction.op == RdnaOpcode::SLoadDwordx8 || instruction.op == RdnaOpcode::SLoadDwordx16) {
+            const auto base = instruction.source0.reg;
+            const auto first = instruction.destination.reg;
+            if (instruction.source0.kind != ShaderRecompiler::RdnaOperandKind::ScalarRegister || base + 1u >= userData.size() || instruction.source1.kind != ShaderRecompiler::RdnaOperandKind::Null || first + instruction.dataDwordCount > scalars.size()) {
+                throw std::runtime_error("AGC graphics: PS4 fetch shader loads its V#s from somewhere other than a user-data table");
+            }
+            const auto address = (static_cast<std::uint64_t>(userData[base]) | (static_cast<std::uint64_t>(userData[base + 1u]) << 32u)) + instruction.memoryOffset;
+            std::vector<std::byte> bytes(instruction.dataDwordCount * 4u);
+            AgcDriver::GuestMemory::Read(address, bytes, 4);
+            if (reads != nullptr) reads->push_back({address, bytes});
+            std::memcpy(scalars.data() + first, bytes.data(), bytes.size());
+            std::fill_n(loaded.begin() + first, instruction.dataDwordCount, true);
+            continue;
+        }
+        const bool formatLoad = instruction.op == RdnaOpcode::BufferLoadFormatX || instruction.op == RdnaOpcode::BufferLoadFormatXy || instruction.op == RdnaOpcode::BufferLoadFormatXyz || instruction.op == RdnaOpcode::BufferLoadFormatXyzw;
+        if (!formatLoad || !instruction.idxen || instruction.offen || instruction.source0.kind != ShaderRecompiler::RdnaOperandKind::VectorRegister || instruction.source0.reg > 3u ||
+            instruction.source2.kind != ShaderRecompiler::RdnaOperandKind::IntegerInlineConstant || instruction.source2.value != 0u) {
+            throw std::runtime_error("AGC graphics: unsupported PS4 fetch shader instruction " + ShaderRecompiler::RdnaInstructionToString(instruction));
+        }
+        const auto sharp = instruction.source1.reg;
+        if (sharp + 4u > scalars.size() || !std::all_of(loaded.begin() + sharp, loaded.begin() + sharp + 4u, [](bool value) { return value; })) {
+            throw std::runtime_error("AGC graphics: PS4 fetch shader uses a V# it did not load");
+        }
+        if (info.resourcesNum >= ShaderRecompiler::ShaderVertexStageInfo::MaxResources) throw std::runtime_error("AGC graphics: vertex resource count exceeds the supported domain");
+        auto& resource = info.resources[info.resourcesNum];
+        auto& destination = info.resourcesDst[info.resourcesNum];
+        resource.fields = rdnaBufferDescriptor({scalars[sharp], scalars[sharp + 1u], scalars[sharp + 2u], scalars[sharp + 3u]});
+        if (instruction.memoryOffset != 0u) {
+            const auto base = ((static_cast<std::uint64_t>(resource.fields[0]) | (static_cast<std::uint64_t>(resource.fields[1]) << 32u)) & 0xffffffffffffull) + instruction.memoryOffset;
+            resource.fields[0] = static_cast<std::uint32_t>(base & 0xffffffffu);
+            resource.fields[1] = (resource.fields[1] & 0xffff0000u) | static_cast<std::uint32_t>((base >> 32u) & 0xffffu);
+        }
+        destination.registerStart = static_cast<std::int32_t>(instruction.destination.reg);
+        destination.registersNum = static_cast<std::int32_t>(instruction.dataDwordCount);
+        destination.attrId = static_cast<std::int32_t>(info.resourcesNum);
+        destination.fetchIndex = instruction.source0.reg == 0u ? 0u : 1u;
         ++info.resourcesNum;
     }
     return info;

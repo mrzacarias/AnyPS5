@@ -19,7 +19,9 @@ struct DecodeRead {
     std::uint64_t address;
     std::vector<std::byte> bytes;
 };
-ShaderRecompiler::ShaderVertexStageInfo DecodeVertexStageInfo(std::span<const std::byte> header, std::uint64_t headerAddress, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads = nullptr, bool staticAbi = false, std::uint32_t hiddenUserWords = 0);
+ShaderRecompiler::ShaderVertexStageInfo DecodeVertexStageInfo(std::span<const std::byte> header, std::uint64_t headerAddress, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads = nullptr, bool staticAbi = false, std::uint32_t hiddenUserWords = 0, std::span<const std::uint32_t> code = {});
+// The vertex fetches of a PS4 vertex program, from the GCN fetch shader its first s_swappc_b64 calls through its user data.
+ShaderRecompiler::ShaderVertexStageInfo DecodePs4VertexStageInfo(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, std::vector<DecodeRead>* reads = nullptr);
 
 }
 

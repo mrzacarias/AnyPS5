@@ -1,4 +1,5 @@
 #include "Recompiler.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include <algorithm>
 #include <cstring>
 #include <atomic>
@@ -185,7 +186,8 @@ IrProgram PrepareResourceProgram(const RecompileRequest& request, ShaderPreparat
     constexpr InstructionTranslator translator;
 
     EmbeddedFetchPlan embeddedFetch;
-    if ((stageKind == ShaderStageKind::Vertex || stageKind == ShaderStageKind::Local) && inputInfo.vertex != nullptr && inputInfo.vertex->fetchEmbedded) {
+    // GCN programs have no AGC vertex attribute table to fetch through; their fetch shader is a call.
+    if ((stageKind == ShaderStageKind::Vertex || stageKind == ShaderStageKind::Local) && inputInfo.vertex != nullptr && inputInfo.vertex->fetchEmbedded && !GcnShaderCode()) {
         embeddedFetch = EmbeddedVertexFetchAnalyzer{}.Analyze(decoded, inputInfo.vertex->fetchAttribReg, inputInfo.vertex->fetchBufferReg, request.context.userDataBaseRegister, static_cast<std::uint32_t>(request.context.userData.size()), request.context.waveSize);
         translateOptions.embeddedFetch = &embeddedFetch;
     }

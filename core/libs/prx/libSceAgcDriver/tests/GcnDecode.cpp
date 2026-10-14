@@ -1,3 +1,4 @@
+#include "ControlFlow/GraphBuilder.hpp"
 #include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "RdnaDecoder/RdnaInstructionDecoder.hpp"
 #include <cstdio>
@@ -112,6 +113,18 @@ int main() {
         check(decoded.instructions.size() == 3u && decoded.instructions[1].programCounter == 4u && decoded.instructions[1].branchTarget == 8u && decoded.instructions[2].programCounter == 8u, "program", "GCN program counters are not kept");
     } catch (const std::exception& error) {
         std::fprintf(stderr, "decode failed: %s\n", error.what());
+        ++failures;
+    }
+
+    try {
+        // Inscryption's vertex program entry: markers, then the fetch-shader call through user data s[0:1] that also
+        // links into s[0:1], then a scalar load that overwrites the link.
+        const std::vector<std::uint32_t> entry{0xbeeb03ffu, 0x22u, 0xbefc03ffu, 0xe8188d42u, 0xbf960000u, 0xbe802100u, 0xc2800508u, 0xbf8c007fu, EndProgram};
+        const auto decoded = RdnaInstructionDecoder{}.Decode(entry);
+        const SwappcInfo swappc{true, 0u, 16u};
+        check(GraphBuilder{}.Build(decoded, &swappc).hasFetchCall, "PS4 fetch call", "the s_swappc_b64 is not a fetch-shader call");
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "PS4 fetch call: %s\n", error.what());
         ++failures;
     }
 

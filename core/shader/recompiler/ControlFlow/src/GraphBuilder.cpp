@@ -433,7 +433,7 @@ bool onlyWritesLinkRegister(const RdnaInstruction& instruction, std::uint32_t li
 bool isFetchCallPrefixOpcode(const RdnaInstruction& instruction) {
     return IsScalarAluOpcode(instruction.op) || instruction.op == RdnaOpcode::SNop || instruction.op == RdnaOpcode::SWaitcnt ||
         instruction.op == RdnaOpcode::SWaitcntDepctr || instruction.op == RdnaOpcode::SWaitIdle || instruction.op == RdnaOpcode::SIcacheInv ||
-        instruction.op == RdnaOpcode::SSetprio || instruction.op == RdnaOpcode::SClause;
+        instruction.op == RdnaOpcode::SSetprio || instruction.op == RdnaOpcode::SClause || instruction.op == RdnaOpcode::STtracedata;
 }
 
 std::uint32_t instructionIndexOfProgramCounter(const RdnaProgram& program, std::uint32_t programCounter) {
@@ -469,7 +469,8 @@ bool isFetchCall(const RdnaProgram& program, std::uint32_t index, const SwappcIn
     const std::uint32_t targetRegister = scalarIndex(instruction.source0);
     const bool userDataPair = swappc != nullptr && targetRegister != NoScalarRegister &&
         targetRegister >= swappc->userDataBaseRegister && targetRegister + 1u < swappc->userDataBaseRegister + swappc->userDataCount &&
-        std::none_of(program.instructions.begin(), program.instructions.end(), [&](const RdnaInstruction& other) {
+        // The call reads its target before it writes the link, which PS4 vertex programs put in the same pair.
+        std::none_of(program.instructions.begin(), program.instructions.begin() + index, [&](const RdnaInstruction& other) {
             return writesScalar(other, targetRegister) || writesScalar(other, targetRegister + 1u);
         });
     return swappc != nullptr && swappc->fetchCallAllowed && positional && (userDataPair || outsideProgram);
@@ -559,9 +560,19 @@ std::vector<SwappcCall> analyzeSwappcCalls(const RdnaProgram& program, const Swa
             }
             if (returns != 1u || regionEnd < call.targetIndex) regionEnd = InvalidControlFlowId;
         }
+        // After a fetch call, straight-line code that overwrites the whole link pair ends the return address's life:
+        // every later instruction is only reached through that write (PS4 vertex programs reuse s[0:1] this way).
+        std::uint32_t linkDead = InvalidControlFlowId;
+        for (auto index = call.callIndex + 1u; call.fetch && index < program.instructions.size(); ++index) {
+            const auto& instruction = program.instructions[index];
+            if (IsDirectBranchOpcode(instruction.op) || instruction.op == RdnaOpcode::SSetpcB64 || instruction.op == RdnaOpcode::SSwappcB64 || instruction.op == RdnaOpcode::SCallB64) break;
+            if (!touchesLinkRegister(instruction, call.linkRegister)) continue;
+            if (onlyWritesLinkRegister(instruction, call.linkRegister) && writesScalar(instruction, call.linkRegister) && writesScalar(instruction, call.linkRegister + 1u)) linkDead = index;
+            break;
+        }
         std::uint32_t returnIndex = InvalidControlFlowId;
         for (std::uint32_t index = 0; index < program.instructions.size(); ++index) {
-            if (index == call.callIndex) {
+            if (index == call.callIndex || index >= linkDead) {
                 continue;
             }
             const auto& instruction = program.instructions[index];
