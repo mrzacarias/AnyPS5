@@ -23,6 +23,9 @@ int main() {
         auto eh = load; eh.Type = 0x6474E550; eh.FileSize = 32;
         const auto regions = Relinker::UnusedNidFilter::ReadExceptionFunctions(Fixture(), {load, eh}, {}, {});
         Require(regions.size() == 1 && regions[0].Begin == 0x2000 && regions[0].End == 0x2010);
+        auto empty = Fixture();
+        Io::WriteU64(empty, 112, 0);
+        Require(Relinker::UnusedNidFilter::ReadExceptionFunctions(empty, {load, eh}, {}, {}).empty());
         auto second = load; second.MappedAddress = 0x1048; second.Offset = 72; second.FileSize = 56;
         auto first = load; first.FileSize = 72;
         Require(Relinker::UnusedNidFilter::ReadExceptionFunctions(Fixture(), {first, second, eh}, {}, {}).size() == 1);
