@@ -1,3 +1,4 @@
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "prx/libSceAgcDriver/Execution/include/ProfileOutput.hpp"
 #include "prx/libSceAgcDriver/Execution/include/CaptureTrace.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Texture.hpp"
@@ -3481,12 +3482,20 @@ void StorageTexture::FlushAllPending(const char* reason) {
 }
 
 std::size_t StorageTexture::StoreSmallPending(const char* reason) {
+    return StorePendingUpTo(SmallStoreBytes, true, reason);
+}
+
+std::uint64_t StorageTexture::LabelStoreBytes() {
+    return ShaderRecompiler::GcnShaderCode() ? 1024u * 1024u : 0u;
+}
+
+std::size_t StorageTexture::StorePendingUpTo(std::uint64_t maxBytes, bool importedOnly, const char* reason) {
     std::vector<std::shared_ptr<StorageTexture>> small;
     {
         auto& pending = Pending();
         std::lock_guard lock(pending.mutex);
         for (auto* texture : pending.textures) {
-            if (texture->guestBytes > SmallStoreBytes) continue;
+            if (texture->guestBytes > maxBytes) continue;
             if (auto alive = texture->weak_from_this().lock()) small.push_back(std::move(alive));
         }
     }
@@ -3494,7 +3503,7 @@ std::size_t StorageTexture::StoreSmallPending(const char* reason) {
     for (const auto& texture : small) {
         const auto address = texture->descriptor.baseAddress;
         const auto bytes = static_cast<std::size_t>(texture->guestBytes);
-        if (!HostImportCovers(texture->context, address, bytes)) continue;
+        if (importedOnly && !HostImportCovers(texture->context, address, bytes)) continue;
         if (FlushPending(address, bytes, nullptr, reason)) ++stored;
     }
     return stored;

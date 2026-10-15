@@ -197,6 +197,12 @@ public:
     static void SaveBeforeUnwatch(std::uint64_t address, std::size_t bytes);
     static constexpr std::uint64_t SmallStoreBytes = 64 * 1024;
     static std::size_t StoreSmallPending(const char* reason);
+    // Stores every pending image of at most `maxBytes` (only those over a host import with `importedOnly`).
+    static std::size_t StorePendingUpTo(std::uint64_t maxBytes, bool importedOnly, const char* reason);
+    // The pending images of at most this many bytes are stored before each label the GPU writes: a PS4 title
+    // reads results back on the CPU after waiting for a label, which the write watch does not see. 0 (none) for
+    // a PS5 title.
+    static std::uint64_t LabelStoreBytes();
     static bool AnyPending();
     static void FlushDumpSelected(const char* reason);
     static bool StoreAtFlipRequested(const char* value);

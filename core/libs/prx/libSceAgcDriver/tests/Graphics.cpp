@@ -1,3 +1,4 @@
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "BdaTests.hpp"
 #include "GraphicsTests.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
@@ -7031,6 +7032,17 @@ void storeAtLabelTests() {
     for (const char* value : {"0", "", "true", "11"}) expectFailure([&] { StorageTexture::StoreAtLabelRequested(value); }, "expected 1");
 }
 
+// A PS4 title stores its small pending images before each label (Inscryption reads its baked card faces back on
+// the CPU after waiting for one); the large render targets and every PS5 title's images stay on the GPU.
+void labelStoreTests() {
+    using AgcDriver::Graphics::StorageTexture;
+    ShaderRecompiler::SetGcnShaderCode(true);
+    const auto ps4 = StorageTexture::LabelStoreBytes();
+    ShaderRecompiler::SetGcnShaderCode(false);
+    Require(ps4 >= 256u * 384u * 4u && ps4 < 1920u * 1088u * 4u, "a PS4 title does not store its card-sized pending images before each label");
+    Require(StorageTexture::LabelStoreBytes() == 0, "a PS5 title stores pending images before each label");
+}
+
 void nullVertexDescriptorTests() {
     using AgcDriver::Graphics::DecodeVertexFormat;
     constexpr std::array formats{VK_FORMAT_R32_SFLOAT, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
@@ -7463,6 +7475,7 @@ int main(int argc, char** argv) {
         highestDrawIndexTests();
         storeAtFlipTests();
         storeAtLabelTests();
+        labelStoreTests();
         nullVertexDescriptorTests();
         vertexZeroFillTests();
         vertexZeroFillMergeTests();
