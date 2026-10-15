@@ -60,7 +60,8 @@ std::uint32_t BlockBytesFor(TextureTileMode tileMode) {
         case TextureTileMode::kPs4Display2D:
         case TextureTileMode::kPs4Thin1D:
         case TextureTileMode::kPs4Thin2D:
-        case TextureTileMode::kPs4Thick1D: return 0u;
+        case TextureTileMode::kPs4Thick1D:
+        case TextureTileMode::kPs4Depth: return 0u;
     }
     throw std::runtime_error("AGC graphics: TextureDetiler encountered an unknown tile mode");
 }
@@ -150,6 +151,7 @@ VkPipeline TextureDetiler::pipeline(TextureTileMode tileMode, std::uint32_t elem
     // per-bit XOR equation for the equation family (2); 20-21 override the block extent in elements.
     std::array<std::uint32_t, 22> values{elementBytes, BlockBytesFor(tileMode), tileMode == TextureTileMode::kLinear ? 0u : 1u, retile ? 1u : 0u};
     if (IsPs4TileMode(tileMode)) {
+        Require(tileMode != TextureTileMode::kPs4Depth, "AGC graphics: PS4 depth tiling (indices 0-7) is read only through the depth surface that holds it; detiling it is not implemented");
         // A PS4 thick micro tile's equation reads the slice too; its slab of four slices is the dispatch's base.
         const auto block = Ps4Tiling(tileMode, elementBytes);
         values[1] = block.bytes;

@@ -63,7 +63,8 @@ BlockLayout GetBlockLayout(TextureTileMode tileMode, std::uint32_t bytesPerEleme
         case TextureTileMode::kPs4Display2D:
         case TextureTileMode::kPs4Thin1D:
         case TextureTileMode::kPs4Thin2D:
-        case TextureTileMode::kPs4Thick1D: {
+        case TextureTileMode::kPs4Thick1D:
+        case TextureTileMode::kPs4Depth: {
             const auto block = Ps4Tiling(tileMode, bytesPerElement);
             return {block.bytes, block.width, block.height};
         }
@@ -114,7 +115,8 @@ bool GetMipTailLayout(TextureTileMode tileMode, const BlockLayout& block, std::u
         case TextureTileMode::kPs4Display2D:
         case TextureTileMode::kPs4Thin1D:
         case TextureTileMode::kPs4Thin2D:
-        case TextureTileMode::kPs4Thick1D: return false;
+        case TextureTileMode::kPs4Thick1D:
+        case TextureTileMode::kPs4Depth: return false;
         case TextureTileMode::kStandard4KB:
         case TextureTileMode::kD4KB:
         case TextureTileMode::kS4KBX:

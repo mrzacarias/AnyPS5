@@ -31,6 +31,8 @@ enum class TextureTileMode {
     kPs4Thin1D,
     kPs4Thin2D,
     kPs4Thick1D,
+    // PS4 depth tiling (indices 0-7): read only through the depth surface that holds it, and sized as thin 2D.
+    kPs4Depth,
     // Upstream's name for SW_64KB_R_X (tile mode 0x1b).
     RenderTarget64KB = kR64KBX
 };

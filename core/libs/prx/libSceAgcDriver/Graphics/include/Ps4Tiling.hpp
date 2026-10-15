@@ -10,16 +10,16 @@ namespace AgcDriver::Graphics {
 // PS4 (GFX7) surface tiling, after AMD addrlib's GCN addressing (EgBasedLib) with the PS4's 8 pipes
 // (P8_32x32_16x16), 256-byte pipe interleave and the macro tile modes of its GB_MACROTILE_MODE table.
 constexpr bool IsPs4TileMode(TextureTileMode mode) {
-    return mode == TextureTileMode::kPs4Display1D || mode == TextureTileMode::kPs4Display2D || mode == TextureTileMode::kPs4Thin1D || mode == TextureTileMode::kPs4Thin2D || mode == TextureTileMode::kPs4Thick1D;
+    return mode == TextureTileMode::kPs4Display1D || mode == TextureTileMode::kPs4Display2D || mode == TextureTileMode::kPs4Thin1D || mode == TextureTileMode::kPs4Thin2D || mode == TextureTileMode::kPs4Thick1D || mode == TextureTileMode::kPs4Depth;
 }
 
 constexpr bool IsPs4MacroTileMode(TextureTileMode mode) {
-    return mode == TextureTileMode::kPs4Display2D || mode == TextureTileMode::kPs4Thin2D;
+    return mode == TextureTileMode::kPs4Display2D || mode == TextureTileMode::kPs4Thin2D || mode == TextureTileMode::kPs4Depth;
 }
 
 // The 1D mode a 2D-tiled level falls back to when it is smaller than a macro tile.
 constexpr TextureTileMode Ps4OneDimensionMode(TextureTileMode mode) {
-    return mode == TextureTileMode::kPs4Display2D ? TextureTileMode::kPs4Display1D : mode == TextureTileMode::kPs4Thin2D ? TextureTileMode::kPs4Thin1D : mode;
+    return mode == TextureTileMode::kPs4Display2D ? TextureTileMode::kPs4Display1D : mode == TextureTileMode::kPs4Thin2D || mode == TextureTileMode::kPs4Depth ? TextureTileMode::kPs4Thin1D : mode;
 }
 
 // The tile mode of a PS4 tiling index (GB_TILE_MODE): linear, or one of the display, thin and thick modes above.

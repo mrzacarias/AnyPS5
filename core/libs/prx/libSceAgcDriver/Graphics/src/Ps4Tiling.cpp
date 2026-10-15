@@ -34,6 +34,7 @@ std::array<std::uint32_t, 6> microTileBits(TextureTileMode mode, std::uint32_t e
 
 TextureTileMode Ps4TileMode(std::uint32_t tileIndex) {
     switch (tileIndex) {
+        case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: return TextureTileMode::kPs4Depth;
         case 8: case 31: return TextureTileMode::kLinear;  // DisplayLinearAligned, DisplayLinearGeneral
         case 9: return TextureTileMode::kPs4Display1D;
         case 10: return TextureTileMode::kPs4Display2D;
@@ -45,6 +46,8 @@ TextureTileMode Ps4TileMode(std::uint32_t tileIndex) {
 }
 
 Ps4TileBlock Ps4Tiling(TextureTileMode mode, std::uint32_t elementBytes) {
+    // A depth-tiled surface is laid out as thin 2D only for its size; its elements are never addressed here.
+    if (mode == TextureTileMode::kPs4Depth) mode = TextureTileMode::kPs4Thin2D;
     require(IsPs4TileMode(mode) && std::has_single_bit(elementBytes) && elementBytes <= 16u, "AGC graphics: invalid PS4 tile mode or element size");
     const auto elementLog2 = static_cast<std::uint32_t>(std::countr_zero(elementBytes));
     // Byte-offset bits inside the pipe and bank interleave: the element's bytes, then its micro tile index.

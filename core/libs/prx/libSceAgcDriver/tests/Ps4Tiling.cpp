@@ -41,6 +41,19 @@ int main() {
             }
         }
     }
+    // Depth tiling indices 0-7 decode to the depth mode, read through the depth surface that holds it and sized as thin 2D.
+    for (std::uint32_t index = 0; index < 8u; ++index) {
+        if (Ps4TileMode(index) != TextureTileMode::kPs4Depth) {
+            std::fprintf(stderr, "PS4 depth tiling index %u is not the depth mode\n", index);
+            ++failures;
+        }
+    }
+    const auto depth = Ps4Tiling(TextureTileMode::kPs4Depth, 4u);
+    const auto thin2d = Ps4Tiling(TextureTileMode::kPs4Thin2D, 4u);
+    if (depth.bytes != thin2d.bytes || depth.width != thin2d.width || depth.height != thin2d.height || !IsPs4MacroTileMode(TextureTileMode::kPs4Depth)) {
+        std::fprintf(stderr, "PS4 depth tiling is not sized as thin 2D\n");
+        ++failures;
+    }
     // Thin 1D: 8x8 micro tiles in rows, elements x0 y0 x1 y1 x2 y2.
     const auto thin = Ps4Tiling(TextureTileMode::kPs4Thin1D, 4u);
     if (thin.bytes != 256u || offset(thin, 16u, 3u, 5u) != ((1u | 1u << 1u | 1u << 2u | 0u << 3u | 0u << 4u | 1u << 5u) * 4u) || offset(thin, 16u, 9u, 8u) != 3u * 256u + 4u) {
