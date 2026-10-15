@@ -101,6 +101,10 @@ struct ShaderSnapshot {
 };
 
 
+// Unregistered programs (every PS4 program) keep their snapshots, and with them their prepared artifacts, in a
+// least-recently-used cache this large: a frame's programs must fit or each draw prepares its program again.
+constexpr std::size_t RawShaderCacheEntries = 1024;
+constexpr std::size_t RawShaderCacheBytes = 32u * 1024u * 1024u;
 std::shared_ptr<const ShaderSnapshot> ReadRawShader(std::uint64_t address);
 std::shared_ptr<const ShaderSnapshot> ProgramSnapshot(const ShaderRegistry& shaders, std::uint64_t address, std::initializer_list<std::uint8_t> types);
 void NoteRawGraphicsDraw();

@@ -733,7 +733,7 @@ int main(int argc, char** argv) {
         });
         for (auto& reader : readers) reader.join();
         for (const auto& snapshot : concurrent) check(snapshot == branched, "concurrent raw compute readers lost snapshot reuse");
-        alignas(256) std::array<std::array<std::uint32_t, 64>, 65> programs{};
+        alignas(256) static std::array<std::array<std::uint32_t, 64>, AgcDriver::DriverDetail::RawShaderCacheEntries + 1u> programs{};
         for (auto& program : programs) program[0] = 0xbf810000;
         const auto firstAddress = reinterpret_cast<std::uintptr_t>(programs.front().data());
         readers.clear();

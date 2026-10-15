@@ -22,6 +22,7 @@
 #include <exception>
 #include <functional>
 #include <list>
+#include <unordered_map>
 #include <atomic>
 #include <pthread.h>
 #include <sstream>
@@ -58,20 +59,19 @@ std::shared_ptr<const ShaderSnapshot> ReadRawShader(std::uint64_t address) {
     GuestMemory::CheckRange(reinterpret_cast<const void*>(address), sizeof(std::uint32_t), 256);
     static std::mutex cacheMutex;
     static std::list<std::shared_ptr<const ShaderSnapshot>> cache;
+    static std::unordered_map<std::uint64_t, std::list<std::shared_ptr<const ShaderSnapshot>>::iterator> index;
     static std::size_t cacheBytes = 0;
     std::shared_ptr<const ShaderSnapshot> cached;
     {
         std::lock_guard lock(cacheMutex);
-        const auto found = std::find_if(cache.begin(), cache.end(), [address](const auto& entry) { return entry->codeAddress == address; });
-        if (found != cache.end()) cached = *found;
+        if (const auto found = index.find(address); found != index.end()) cached = *found->second;
     }
     if (cached) {
         const auto code = std::as_bytes(std::span(cached->code));
         GuestMemory::FlushGpuWrites(address, code.size());
         if (GuestMemory::CompareMapped(address, code) == GuestMemory::Compare::Equal) {
             std::lock_guard lock(cacheMutex);
-            const auto found = std::find(cache.begin(), cache.end(), cached);
-            if (found != cache.end()) cache.splice(cache.begin(), cache, found);
+            if (const auto found = index.find(address); found != index.end() && *found->second == cached) cache.splice(cache.begin(), cache, found->second);
             return cached;
         }
     }
@@ -95,22 +95,24 @@ std::shared_ptr<const ShaderSnapshot> ReadRawShader(std::uint64_t address) {
             snapshot.code.resize(last.programCounter / sizeof(std::uint32_t) + last.wordCount);
             auto result = std::make_shared<const ShaderSnapshot>(std::move(snapshot));
             std::lock_guard lock(cacheMutex);
-            const auto found = std::find_if(cache.begin(), cache.end(), [address](const auto& entry) { return entry->codeAddress == address; });
-            if (found != cache.end()) {
-                if ((*found)->code == result->code) {
-                    result = *found;
-                    cache.splice(cache.begin(), cache, found);
+            if (const auto found = index.find(address); found != index.end()) {
+                if ((*found->second)->code == result->code) {
+                    result = *found->second;
+                    cache.splice(cache.begin(), cache, found->second);
                     return result;
                 }
-                cacheBytes -= (*found)->code.size() * sizeof(std::uint32_t);
-                cache.erase(found);
+                cacheBytes -= (*found->second)->code.size() * sizeof(std::uint32_t);
+                cache.erase(found->second);
+                index.erase(found);
             }
             const auto bytes = result->code.size() * sizeof(std::uint32_t);
-            while (!cache.empty() && (cache.size() >= 64 || cacheBytes + bytes > 8 * 1024 * 1024)) {
+            while (!cache.empty() && (cache.size() >= RawShaderCacheEntries || cacheBytes + bytes > RawShaderCacheBytes)) {
                 cacheBytes -= cache.back()->code.size() * sizeof(std::uint32_t);
+                index.erase(cache.back()->codeAddress);
                 cache.pop_back();
             }
             cache.push_front(result);
+            index[address] = cache.begin();
             cacheBytes += bytes;
             return result;
         } catch (const std::out_of_range&) {
