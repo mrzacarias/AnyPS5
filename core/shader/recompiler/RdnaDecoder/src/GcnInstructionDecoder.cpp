@@ -157,10 +157,25 @@ GcnImageDimensionScope::~GcnImageDimensionScope() {
 }
 
 std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, std::uint32_t userDataBase, const std::function<bool(std::uint64_t address, std::uint32_t& value)>& read) {
-    std::unordered_map<std::uint32_t, std::uint32_t> dimensions;
-    std::array<std::optional<std::uint32_t>, 104> scalars{};
-    for (std::size_t index = 0; index < userData.size() && userDataBase + index < scalars.size(); ++index) scalars[userDataBase + index] = userData[index];
-    const auto scalar = [&](const RdnaOperand& operand) -> std::optional<std::uint32_t> {
+    using Scalars = std::array<std::optional<std::uint32_t>, 104>;
+    struct Decoded {
+        std::uint32_t word;
+        RdnaInstruction instruction;
+    };
+    std::vector<Decoded> program;
+    std::unordered_map<std::uint32_t, std::size_t> indexOfWord;
+    for (std::uint32_t word = 0; word < code.size();) {
+        RdnaInstruction instruction;
+        try {
+            instruction = DecodeGcnInstruction(word * 4u, code, word);
+        } catch (const std::exception&) {
+            break;
+        }
+        indexOfWord.emplace(word, program.size());
+        program.push_back({word, instruction});
+        word += instruction.wordCount;
+    }
+    const auto scalarOf = [](const Scalars& scalars, const RdnaOperand& operand) -> std::optional<std::uint32_t> {
         switch (operand.kind) {
             case RdnaOperandKind::ScalarRegister: return operand.reg < scalars.size() ? scalars[operand.reg] : std::nullopt;
             case RdnaOperandKind::LiteralConstant: return operand.value;
@@ -169,17 +184,13 @@ std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<co
             default: return std::nullopt;
         }
     };
-    const auto forget = [&](const RdnaOperand& operand, std::uint32_t count) {
+    const auto forget = [](Scalars& scalars, const RdnaOperand& operand, std::uint32_t count) {
         if (operand.kind != RdnaOperandKind::ScalarRegister) return;
         for (auto reg = operand.reg; reg < operand.reg + count && reg < scalars.size(); ++reg) scalars[reg].reset();
     };
-    for (std::uint32_t word = 0; word < code.size();) {
-        RdnaInstruction instruction;
-        try {
-            instruction = DecodeGcnInstruction(word * 4u, code, word);
-        } catch (const std::exception&) {
-            break;
-        }
+    // The registers an instruction leaves, from those it finds.
+    const auto step = [&](Scalars& scalars, const RdnaInstruction& instruction) {
+        const auto scalar = [&](const RdnaOperand& operand) { return scalarOf(scalars, operand); };
         const auto destination = instruction.destination;
         switch (instruction.op) {
             case RdnaOpcode::SLoadDword: case RdnaOpcode::SLoadDwordx2: case RdnaOpcode::SLoadDwordx4: case RdnaOpcode::SLoadDwordx8: case RdnaOpcode::SLoadDwordx16:
@@ -193,7 +204,7 @@ std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<co
                 bool loaded = instruction.source0.kind == RdnaOperandKind::ScalarRegister && low && high && offset;
                 const auto address = loaded ? (*low | (static_cast<std::uint64_t>(*high & 0xffffu) << 32u)) + instruction.memoryOffset + *offset : 0u;
                 for (std::uint32_t index = 0; loaded && index < instruction.dataDwordCount; ++index) loaded = read(address + index * 4u, values[index]);
-                forget(destination, instruction.dataDwordCount);
+                forget(scalars, destination, instruction.dataDwordCount);
                 if (loaded && destination.kind == RdnaOperandKind::ScalarRegister) {
                     for (std::uint32_t index = 0; index < instruction.dataDwordCount && destination.reg + index < scalars.size(); ++index) scalars[destination.reg + index] = values[index];
                 }
@@ -201,7 +212,7 @@ std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<co
             }
             case RdnaOpcode::SMovB32: {
                 const auto value = scalar(instruction.source0);
-                forget(destination, 1u);
+                forget(scalars, destination, 1u);
                 if (destination.kind == RdnaOperandKind::ScalarRegister && destination.reg < scalars.size()) scalars[destination.reg] = value;
                 break;
             }
@@ -210,7 +221,7 @@ std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<co
                 auto next = instruction.source0;
                 ++next.reg;
                 const auto high = instruction.source0.kind == RdnaOperandKind::ScalarRegister ? scalar(next) : instruction.source0.kind == RdnaOperandKind::IntegerInlineConstant && instruction.source0.signedVal < 0 ? std::optional<std::uint32_t>(0xffffffffu) : std::optional<std::uint32_t>(0u);
-                forget(destination, 2u);
+                forget(scalars, destination, 2u);
                 if (destination.kind == RdnaOperandKind::ScalarRegister && destination.reg + 1u < scalars.size()) {
                     scalars[destination.reg] = low;
                     scalars[destination.reg + 1u] = low ? high : std::nullopt;
@@ -222,18 +233,61 @@ std::unordered_map<std::uint32_t, std::uint32_t> GcnImageDimensions(std::span<co
                 scalars.fill(std::nullopt);
                 break;
             default:
-                if ((code[word] >> 26u) == 0x3cu && word + 1u < code.size()) {
-                    const auto resource = ((code[word + 1u] >> 16u) & 0x1fu) * 4u;
-                    const bool known = resource + 8u <= scalars.size() && std::all_of(scalars.begin() + resource, scalars.begin() + resource + 8u, [](const auto& value) { return value.has_value(); });
-                    if (known) {
-                        if (const auto dimension = imageDimension(*scalars[resource + 3u] >> 28u, ((code[word] >> 14u) & 1u) != 0u)) dimensions.emplace(word * 4u, *dimension);
-                    }
-                }
-                forget(destination, instruction.is64Bit ? 2u : 1u);
-                forget(instruction.destination2, 2u);
+                forget(scalars, destination, instruction.is64Bit ? 2u : 1u);
+                forget(scalars, instruction.destination2, 2u);
                 break;
         }
-        word += instruction.wordCount;
+    };
+    // The registers are followed along the program's branches: an instruction starts from what every path to it
+    // agrees on. s_branch and s_endpgm end their path; the conditional branches (SOPP 4-9) also fall through.
+    std::vector<std::optional<Scalars>> entry(program.size());
+    std::vector<std::size_t> pending;
+    const auto reach = [&](std::size_t index, const Scalars& scalars) {
+        auto& state = entry[index];
+        bool changed = !state.has_value();
+        if (changed) {
+            state = scalars;
+        } else {
+            for (std::size_t reg = 0; reg < scalars.size(); ++reg) {
+                if ((*state)[reg] && (!scalars[reg] || *scalars[reg] != *(*state)[reg])) {
+                    (*state)[reg].reset();
+                    changed = true;
+                }
+            }
+        }
+        if (changed) pending.push_back(index);
+    };
+    if (!program.empty()) {
+        Scalars initial{};
+        for (std::size_t index = 0; index < userData.size() && userDataBase + index < initial.size(); ++index) initial[userDataBase + index] = userData[index];
+        reach(0u, initial);
+    }
+    while (!pending.empty()) {
+        const auto index = pending.back();
+        pending.pop_back();
+        auto scalars = *entry[index];
+        const auto& [word, instruction] = program[index];
+        step(scalars, instruction);
+        const auto raw = code[word];
+        const bool sopp = (raw >> 23u) == 0x17fu;
+        const auto opcode = (raw >> 16u) & 0x7fu;
+        if (sopp && opcode >= 2u && opcode <= 9u && opcode != 3u) {
+            const auto target = static_cast<std::int64_t>(word) + 1 + static_cast<std::int16_t>(raw & 0xffffu);
+            if (const auto found = target >= 0 ? indexOfWord.find(static_cast<std::uint32_t>(target)) : indexOfWord.end(); found != indexOfWord.end()) reach(found->second, scalars);
+        }
+        const bool ends = sopp && (opcode == 1u || opcode == 2u);
+        if (!ends && index + 1u < program.size()) reach(index + 1u, scalars);
+    }
+    std::unordered_map<std::uint32_t, std::uint32_t> dimensions;
+    for (std::size_t index = 0; index < program.size(); ++index) {
+        const auto word = program[index].word;
+        if (!entry[index] || (code[word] >> 26u) != 0x3cu || word + 1u >= code.size()) continue;
+        const auto& scalars = *entry[index];
+        const auto resource = ((code[word + 1u] >> 16u) & 0x1fu) * 4u;
+        const bool known = resource + 8u <= scalars.size() && std::all_of(scalars.begin() + resource, scalars.begin() + resource + 8u, [](const auto& value) { return value.has_value(); });
+        if (known) {
+            if (const auto dimension = imageDimension(*scalars[resource + 3u] >> 28u, ((code[word] >> 14u) & 1u) != 0u)) dimensions.emplace(word * 4u, *dimension);
+        }
     }
     return dimensions;
 }

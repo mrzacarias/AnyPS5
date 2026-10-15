@@ -143,6 +143,17 @@ int main() {
             check(DecodeRdnaInstruction(4u, code, 1u).imageDimension == RdnaImageDimension::Dim3D && DecodeRdnaInstruction(20u, code, 5u).imageDimension == RdnaImageDimension::Dim2D, "GcnImageDimensionScope", "the 3D sample is not 3D, or the unknown one is not 2D");
         }
 
+        // The scan follows branches (Inscryption's probe-volume pixel shader): the 3D T# in user data s[0:7] reaches
+        // the sample at 24 only through the branch that skips the s_mov making it 2D; at 32 the paths disagree.
+        {
+            const std::array<std::uint32_t, 2> sample{(0x3cu << 26u) | (0x20u << 18u) | (0xfu << 8u), 1u | (4u << 8u) | (3u << 21u)};
+            const std::vector<std::uint32_t> code{sample[0], sample[1], 0xbf860003u, 0xbe8303ffu, 0x90000facu, 0xbf820002u, sample[0], sample[1], sample[0], sample[1], EndProgram};
+            std::vector<std::uint32_t> userData(16u, 0u);
+            userData[3] = 0xa0000facu;
+            const auto dimensions = GcnImageDimensions(code, userData, 0u, [](std::uint64_t, std::uint32_t&) { return false; });
+            check(dimensions.size() == 2u && dimensions.contains(0u) && dimensions.at(0u) == 2u && dimensions.contains(24u) && dimensions.at(24u) == 2u, "GcnImageDimensions branches", "a T# was not followed along the branch past the code that replaces it, or the join of disagreeing paths kept one");
+        }
+
         // GCN program counters: the one-word SMRD keeps the branch target at its GCN address.
         const std::vector<std::uint32_t> program{0xc2060900u, 0xbf820000u, EndProgram};
         const auto decoded = RdnaInstructionDecoder{}.Decode(program);
