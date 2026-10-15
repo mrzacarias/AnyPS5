@@ -204,6 +204,8 @@ void fillBuffer(std::span<std::byte> bytes, uint32_t width, uint32_t height) {
 }
 
 void testDecode() {
+    check(Ps4DisplayPixelFormat(0x80000000u) == 0x8000000000000000ull && Ps4DisplayPixelFormat(0x80002200u) == 0x8000000022000000ull, "PS4 8-bit display format was not mapped");
+    check(Ps4DisplayPixelFormat(0x88000000u) == 0x8100000000000000ull && Ps4DisplayPixelFormat(0x88060000u) == 0x8100000000000000ull, "PS4 10-bit display format was not mapped");
     std::vector<std::byte> allocation(6 * 65536 + 65535);
     const auto tiled = alignedBuffer(allocation);
     AgcDriver::DisplayBuffer buffer{reinterpret_cast<uint64_t>(tiled.data()), 0x8000000000000000ull, 259, 137};

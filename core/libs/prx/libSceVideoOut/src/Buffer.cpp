@@ -125,6 +125,15 @@ void APS5_VABI sceVideoOutSetBufferAttribute(VideoOutBufferAttribute* attribute,
     attribute->pitch_in_pixel = pitchInPixel;
 }
 
+uint64_t Ps4DisplayPixelFormat(uint32_t pixelFormat) {
+    // A2R10G10B10_SRGB (0x88000000) and A2R10G10B10 (0x88060000) are A8R8G8B8_SRGB with the PS4 10-bit flag.
+    constexpr uint32_t Ps4TenBit = 0x08000000u;
+    constexpr uint64_t TenBit = 0x0100000000000000ull;
+    const bool tenBit = pixelFormat == 0x88000000u || pixelFormat == 0x88060000u;
+    const uint32_t base = tenBit ? pixelFormat & ~Ps4TenBit & 0xFFF0FFFFu : pixelFormat;
+    return (static_cast<uint64_t>(base & 0xFFFF0000u) << 32) | (static_cast<uint64_t>(base & 0xFFFFu) << 16) | (tenBit ? TenBit : 0u);
+}
+
 int APS5_VABI sceVideoOutRegisterBuffers(int handle, int bufferIndexStart, void* const* addresses, int bufferNum, const VideoOutBufferAttribute* attribute) try {
     auto cfg = VideoOutDriver::Get().GetConfig(handle);
     if (cfg == nullptr) {
@@ -149,7 +158,7 @@ int APS5_VABI sceVideoOutRegisterBuffers(int handle, int bufferIndexStart, void*
     converted.height = attribute->height;
     converted.pitch_in_pixel = attribute->pitch_in_pixel;
     converted.option = attribute->option;
-    converted.pixel_format = (static_cast<std::uint64_t>(attribute->pixel_format & 0xFFFF0000u) << 32) | (static_cast<std::uint64_t>(attribute->pixel_format & 0xFFFFu) << 16);
+    converted.pixel_format = Ps4DisplayPixelFormat(attribute->pixel_format);
     std::array<VideoOutBuffers, VIDEO_OUT_BUFFER_NUM_MAX> buffers{};
     for (int i = 0; i < bufferNum; ++i) buffers[i].data = addresses[i];
     int setIndex = 0;
