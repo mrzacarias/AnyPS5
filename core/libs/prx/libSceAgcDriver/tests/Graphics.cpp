@@ -5601,6 +5601,20 @@ int main(int argc, char** argv) {
             deep.depthTest = true;
             expectFailure([&] { AgcDriver::Graphics::ValidateViewport(context, deep); }, "viewport depth outside [0, 1]");
             Require(AgcDriver::Graphics::HostViewport(unrestricted, deep).minDepth == -1.0f, "an unrestricted depth range was clamped");
+            auto clamping = context;
+            clamping.depthClamp = true;
+            auto unclamping = context;
+            unclamping.depthClamp = false;
+            deep.viewport.maxDepth = 1.0f;
+            expectFailure([&] { AgcDriver::Graphics::ValidateViewport(clamping, deep); }, "viewport depth outside [0, 1]");
+            deep.negativeOneToOne = true;
+            Require(AgcDriver::Graphics::ClampedDepthRange(clamping, deep) && !AgcDriver::Graphics::ClampedDepthRange(unclamping, deep) && !AgcDriver::Graphics::ClampedDepthRange(unrestricted, deep), "a [-w, w] clip space with depth range (-1, 1) did not clamp only without VK_EXT_depth_range_unrestricted");
+            AgcDriver::Graphics::ValidateViewport(clamping, deep);
+            const auto clamped = AgcDriver::Graphics::HostViewport(clamping, deep);
+            Require(clamped.minDepth == 0.0f && clamped.maxDepth == 1.0f, "a clamped depth range is not zoffset to zoffset + zscale");
+            deep.viewport.minDepth = 1.0f;
+            deep.viewport.maxDepth = -1.0f;
+            Require(!AgcDriver::Graphics::ClampedDepthRange(clamping, deep), "a reversed depth range leaving [0, 1] was clamped");
         }
         RunGuestLeaseWaitTests();
         stateTests();

@@ -117,6 +117,11 @@ void ClearCachedPipelines(VkDevice device);
 bool HasStencil(VkFormat format);
 // Device limit checks of the viewport, which is dynamic state and so no longer checked by Pipeline.
 void ValidateViewport(const Context& context, const State& state);
+// Without VK_EXT_depth_range_unrestricted, a [-w, w] clip space whose depth range leaves [0, 1] draws in the [0, w]
+// clip space with depth clamping and the range zoffset to zoffset + zscale, when that range lies in [0, 1]. Within the
+// guest's clip volume that stores the depth hardware stores when its PA_SC_VPORT_ZMIN/ZMAX clamp is that range;
+// geometry past the guest's near and far planes is clamped instead of clipped.
+bool ClampedDepthRange(const Context& context, const State& state);
 VkViewport HostViewport(const Context& context, const State& state);
 void ValidateDepthBounds(const Context& context, const State& state);
 void ValidateProvokingVertex(const Context& context, const State& state, std::span<const CompiledShader> shaders = {});

@@ -115,10 +115,19 @@ void ValidateProvokingVertex(const Context& context, const State& state, std::sp
     }
 }
 
+bool ClampedDepthRange(const Context& context, const State& state) {
+    const auto& viewport = state.viewport;
+    const bool depthUsed = state.depth.has_value() && (state.depthTest || state.depthWrite || state.depthBoundsTest);
+    const auto outside = [](float depth) { return !(depth >= 0 && depth <= 1); };
+    return !context.depthRangeUnrestricted && context.depthClamp && depthUsed && state.negativeOneToOne && (outside(viewport.minDepth) || outside(viewport.maxDepth)) && !outside((viewport.minDepth + viewport.maxDepth) / 2) && !outside(viewport.maxDepth);
+}
+
 VkViewport HostViewport(const Context& context, const State& state) {
     auto viewport = state.viewport;
     const bool depthUsed = state.depth.has_value() && (state.depthTest || state.depthWrite || state.depthBoundsTest);
-    if (!context.depthRangeUnrestricted && !depthUsed) {
+    if (ClampedDepthRange(context, state)) {
+        viewport.minDepth = (viewport.minDepth + viewport.maxDepth) / 2;
+    } else if (!context.depthRangeUnrestricted && !depthUsed) {
         viewport.minDepth = std::clamp(viewport.minDepth, 0.0f, 1.0f);
         viewport.maxDepth = std::clamp(viewport.maxDepth, 0.0f, 1.0f);
     }
@@ -136,7 +145,9 @@ bool ValidateSampleLocations(const Context& context, const State& state) {
 void ValidateViewport(const Context& context, const State& state) {
     const auto viewport = HostViewport(context, state);
     Require(std::isfinite(viewport.minDepth) && std::isfinite(viewport.maxDepth), "non-finite viewport depth range");
-    Require(context.depthRangeUnrestricted || (viewport.minDepth >= 0 && viewport.minDepth <= 1 && viewport.maxDepth >= 0 && viewport.maxDepth <= 1), "viewport depth outside [0, 1] requires VK_EXT_depth_range_unrestricted");
+    if (!context.depthRangeUnrestricted && !(viewport.minDepth >= 0 && viewport.minDepth <= 1 && viewport.maxDepth >= 0 && viewport.maxDepth <= 1)) {
+        throw std::runtime_error("AGC graphics: viewport depth outside [0, 1] (" + std::to_string(viewport.minDepth) + ", " + std::to_string(viewport.maxDepth) + ") requires VK_EXT_depth_range_unrestricted");
+    }
     Require(std::isfinite(viewport.x) && std::isfinite(viewport.y) && std::isfinite(viewport.width) && std::isfinite(viewport.height), "viewport arithmetic overflow");
     Require(viewport.width <= context.limits.maxViewportDimensions[0] && std::abs(viewport.height) <= context.limits.maxViewportDimensions[1], "viewport dimensions exceed device limits");
     Require(viewport.x >= context.limits.viewportBoundsRange[0] && viewport.x + viewport.width <= context.limits.viewportBoundsRange[1], "viewport X exceeds device bounds");
@@ -218,8 +229,9 @@ bool libraryKeys(PipelineLibraryKeys& keys, const Context& context, const State&
     appendKey(keys.vertexInput, state.topology);
     appendKey(keys.vertexInput, state.primitiveRestart);
     appendKey(keys.preRasterization, state.provokingVertexMode);
-    appendKey(keys.preRasterization, state.negativeOneToOne);
-    appendKey(keys.preRasterization, state.depthClamp && context.depthClamp);
+    const bool clampedDepth = ClampedDepthRange(context, state);
+    appendKey(keys.preRasterization, state.negativeOneToOne && !clampedDepth);
+    appendKey(keys.preRasterization, (state.depthClamp && context.depthClamp) || clampedDepth);
     appendKey(keys.preRasterization, state.conservativeRasterization);
     appendKey(keys.preRasterization, state.depth.has_value() && state.depthBias);
     appendKey(keys.preRasterization, state.stages.tessellation.has_value());
@@ -288,7 +300,8 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
     Require(!depthBounds || context.depthBounds, "device does not support the depth bounds test");
     Require(!depthBias || state.depthBiasClamp == 0.0f || context.depthBiasClamp, "device does not support depth bias clamping");
     Require(!state.dualSourceBlend || (context.dualSrcBlend && state.blends.size() <= context.limits.maxFragmentDualSrcAttachments), "device does not support dual-source blending into this many attachments");
-    Require(!state.negativeOneToOne || context.depthClipControl, "negative-one-to-one depth clipping requires VK_EXT_depth_clip_control with depthClipControl enabled");
+    const bool clampedDepth = ClampedDepthRange(context, state);
+    Require(!state.negativeOneToOne || clampedDepth || context.depthClipControl, "negative-one-to-one depth clipping requires VK_EXT_depth_clip_control with depthClipControl enabled");
     Require(state.conservativeRasterization == VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT || context.conservativeRasterization, "conservative rasterization requires VK_EXT_conservative_rasterization with at most 1/256 pixel of overestimation and degenerate triangles rasterized");
     ValidateProvokingVertex(context, state, shaders);
     if (state.rectList) Require(context.tessellationShader && context.limits.maxTessellationPatchSize >= 4, "rect-list requires tessellation with four output control points");
@@ -408,8 +421,8 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         // clip control stays baked in.
         VkPipelineViewportStateCreateInfo viewports{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
         VkPipelineViewportDepthClipControlCreateInfoEXT depthClip{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT};
-        depthClip.negativeOneToOne = state.negativeOneToOne;
-        if (state.negativeOneToOne) viewports.pNext = &depthClip;
+        depthClip.negativeOneToOne = state.negativeOneToOne && !clampedDepth;
+        if (depthClip.negativeOneToOne) viewports.pNext = &depthClip;
         viewports.viewportCount = 1;
         viewports.scissorCount = 1;
         PipelineLibraryKeys keys;
@@ -423,7 +436,7 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         dynamic.pDynamicStates = dynamicStates.data();
         VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
         raster.polygonMode = VK_POLYGON_MODE_FILL;
-        raster.depthClampEnable = state.depthClamp && context.depthClamp ? VK_TRUE : VK_FALSE;
+        raster.depthClampEnable = (state.depthClamp && context.depthClamp) || clampedDepth ? VK_TRUE : VK_FALSE;
         Require(!state.depthBiasPerFace || (depthBias && state.cullMode == VK_CULL_MODE_NONE), "per-face depth bias needs both faces rasterized");
         raster.cullMode = state.depthBiasPerFace ? VK_CULL_MODE_BACK_BIT : state.cullMode;
         raster.frontFace = state.frontFace;
@@ -794,8 +807,8 @@ void pipelineKey(std::vector<std::byte>& key, const Context& context, const Stat
     append(key, state.cullMode);
     append(key, state.frontFace);
     append(key, state.provokingVertexMode);
-    append(key, state.negativeOneToOne);
-    append(key, state.depthClamp && context.depthClamp);
+    append(key, state.negativeOneToOne && !ClampedDepthRange(context, state));
+    append(key, (state.depthClamp && context.depthClamp) || ClampedDepthRange(context, state));
     append(key, state.conservativeRasterization);
     append(key, state.blends.size());
     for (const auto& blend : state.blends) append(key, blend);
