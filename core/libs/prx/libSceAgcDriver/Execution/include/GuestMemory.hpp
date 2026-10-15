@@ -47,6 +47,8 @@ Compare CompareMapped(std::uint64_t address, std::span<const std::byte> bytes);
 Compare CopyMapped(std::uint64_t address, std::span<std::byte> out);
 void WriteChangedCommitted(std::uint64_t address, std::span<const std::byte> current, std::span<const std::byte> original);
 void Write(std::uint64_t address, std::span<const std::byte> source, std::size_t alignment = 1);
+// A GPU label store from the CPU: through the host backing views, as completion labels are, whatever its size.
+void WriteLabel(std::uint64_t address, std::span<const std::byte> source);
 // Stores the parts of `current` that differ from `original` (the guest bytes the GPU started from), so
 // guest writes made meanwhile to untouched bytes survive. Compares in 256-byte blocks.
 void WriteChanged(std::uint64_t address, std::span<const std::byte> current, std::span<const std::byte> original);

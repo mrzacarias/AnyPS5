@@ -2084,6 +2084,14 @@ void Write(std::uint64_t address, std::span<const std::byte> source, std::size_t
     else StoreOwnBytes(address, source.size(), [&] { std::memcpy(destination, source.data(), source.size()); });
 }
 
+void WriteLabel(std::uint64_t address, std::span<const std::byte> source) {
+    if (source.empty()) return;
+    const ReadSiteScope site(ReadSite::Store);
+    FlushGpuWrites(address, source.size());
+    CheckRange(reinterpret_cast<const void*>(address), source.size(), 4, true);
+    StoreOwnBytes(address, source);
+}
+
 }
 
 extern "C" void AgcDriverCheckGuestMemory_nid_postfix(const void* pointer, std::size_t bytes, std::size_t alignment, bool writable) {
