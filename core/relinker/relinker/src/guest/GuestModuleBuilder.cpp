@@ -8,6 +8,7 @@
 #include <io/NativePath.hpp>
 #include <io/BufferUtils.hpp>
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <limits>
 #include <map>
@@ -23,6 +24,20 @@
 namespace Relinker {
 
 namespace {
+
+// libunwind's _Ux86_64_setcontext in old SDK libc.prx restores the signal mask with a raw
+// sigprocmask(SIG_SETMASK, &uc->uc_sigmask, NULL), which cannot reach libkernel. The syscall becomes xor eax, eax: it
+// returns 0 and keeps the thread's mask. The sequence runs only when a C++ exception resumes.
+constexpr std::array<std::uint8_t, 22> UnwindSetcontextSigprocmask{
+    0x57, 0x31, 0xD2, 0x48, 0x8D, 0x37, 0xBF, 0x03, 0x00, 0x00, 0x00, 0xB8, 0x54, 0x01, 0x00, 0x00, 0x49, 0x89, 0xCA, 0x0F, 0x05, 0x5F,
+};
+
+void ReplaceUnwindSetcontextSigprocmask(std::span<std::uint8_t> code) {
+    for (auto at = code.begin(); (at = std::search(at, code.end(), UnwindSetcontextSigprocmask.begin(), UnwindSetcontextSigprocmask.end())) != code.end(); at += UnwindSetcontextSigprocmask.size()) {
+        at[19] = 0x31;
+        at[20] = 0xC0;
+    }
+}
 
 struct GuestExport {
     std::size_t Provider;
@@ -314,6 +329,7 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
                 const std::span<const std::uint8_t> segment(image.Bytes.data() + header.Offset, header.FileSize);
                 if (const auto end = FindSceCodeEnd(segment, header.MappedAddress, unwindFunctions, image.Got, image.Dynamic.RelaPltData.size())) size = *end - header.MappedAddress;
             }
+            ReplaceUnwindSetcontextSigprocmask(std::span(image.Bytes).subspan(header.Offset, size));
             const std::vector<std::uint8_t> code(image.Bytes.begin() + header.Offset, image.Bytes.begin() + header.Offset + size);
             for (const auto offset : syscallScanner.ScanCodeSectionForSyscalls(code, header.MappedAddress, size, Io::Utf8Path(image.SourcePath))) {
                 if (offset > code.size() || code.size() - offset < 2u)
