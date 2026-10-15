@@ -248,6 +248,8 @@ std::int64_t APS5_VABI sceKernelRead(int d, void* buf, std::size_t nbytes) {
         return n < 0 ? SceKernelError(*__error_nid_postfix()) : n;
     }
     if (buf == nullptr) {
+        // A read of no bytes touches no buffer; it only checks the descriptor.
+        if (nbytes == 0) return NativeRead(d, nullptr, 0) < 0 ? SceIoErrorFromErrno(errno) : 0;
         throw std::invalid_argument(std::string(__func__) + ": buf is null");
     }
     const GuestArena::HostWrite destination(buf, nbytes);

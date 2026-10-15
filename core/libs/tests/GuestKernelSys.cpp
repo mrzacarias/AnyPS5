@@ -253,6 +253,8 @@ int main() {
     for (const auto& path : {std::string("file.txt"), chrootFile, "/../../.." + chrootFile, "../.." + chrootFile}) {
         const int opened = sceKernelOpen(path.c_str(), SCE_KERNEL_O_RDONLY, 0);
         char byte = 0;
+        // A read of no bytes takes a null buffer and leaves the offset.
+        Require(opened >= 0 && sceKernelRead(opened, nullptr, 0) == 0);
         Require(opened >= 0 && sceKernelRead(opened, &byte, 1) == 1 && byte == 'x');
         Require(sceKernelClose(opened) == 0);
     }
