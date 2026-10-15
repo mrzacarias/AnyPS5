@@ -9,6 +9,7 @@
 #include "prx//libc/include/General.hpp"
 #include "prx/libScePad/include/Pad.hpp"
 #include "prx/libScePad/include/PadState.hpp"
+#include "prx/libc/include/ApplicationHeap.hpp"
 
 namespace {
 
@@ -246,7 +247,7 @@ int APS5_VABI scePadSetTriggerEffect(int handle, const void* param) {
 int APS5_VABI scePadSetVibration(int handle, const PadVibrationParam* param) {
  if (handle != PAD_HANDLE) return PAD_ERROR_INVALID_HANDLE;
  if (param == nullptr) return PAD_ERROR_INVALID_ARG;
- Pad::SetVibration(param->large_motor, param->small_motor);
+ Pad::SetVibration(param->large_motor, param->small_motor, ApplicationIsPs4_nid_no_patch());
  return PAD_OK;
 }
 

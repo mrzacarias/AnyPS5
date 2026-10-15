@@ -263,6 +263,13 @@ int main() {
         Require(PadFetchOutput_nid_postfix(&sequence, &snapshot));
         Require(snapshot.audioVibrationLarge == 0 && snapshot.audioVibrationSmall == 0);
         Require(snapshot.vibrationLarge == 12 && snapshot.vibrationSmall == 34);
+        // A PS4 title's vibration is a pulse: setting the same values again starts it again.
+        Pad::SetVibration(12, 34);
+        Require(!PadFetchOutput_nid_postfix(&sequence, &snapshot));
+        const auto pulses = snapshot.vibrationPulses;
+        Pad::SetVibration(12, 34, true);
+        Require(PadFetchOutput_nid_postfix(&sequence, &snapshot));
+        Require(snapshot.vibrationLarge == 12 && snapshot.vibrationSmall == 34 && snapshot.vibrationPulses == pulses + 1);
         Pad::SetVibration(0, 0);
     }
     constexpr int noHandle = static_cast<int>(0x80920008);

@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "prx/libc/include/ApplicationHeap.hpp"
 #include "SDL.h"
 #include "prx/libSceVideoOut/include/PadInput.hpp"
 #include "prx/libSceVideoOut/include/DisplayWindow.hpp"
@@ -73,10 +74,17 @@ void PadInput::closeController() {
     controllerState = {};
 }
 
+namespace {
+constexpr Uint32 rumbleMs = 2000;
+// A PS4 title's vibration pulse: Inscryption starts one each time a card strikes, a short knock.
+constexpr Uint32 ps4PulseMs = 250;
+}
+
 void PadInput::applyOutput() {
     PadOutputState fetched;
     if (PadFetchOutput_nid_postfix(&outputSequence, &fetched)) {
         const bool motionChanged = fetched.motionEnabled != outputState.motionEnabled;
+        if (fetched.vibrationPulses != outputState.vibrationPulses) pulseEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds(ps4PulseMs);
         outputState = fetched;
         outputPending = true;
         if (motionChanged) enableSensors();
@@ -84,18 +92,23 @@ void PadInput::applyOutput() {
     if (controller == nullptr) return;
     const auto now = std::chrono::steady_clock::now();
     const bool isPs5 = SDL_GameControllerGetType(controller) == SDL_CONTROLLER_TYPE_PS5;
-    const auto large = isPs5 ? outputState.vibrationLarge : std::max(outputState.vibrationLarge, outputState.audioVibrationLarge);
-    const auto small = isPs5 ? outputState.vibrationSmall : std::max(outputState.vibrationSmall, outputState.audioVibrationSmall);
+    // A PS4 title's vibration is a pulse that lasts only while the title sets it again (Inscryption only ever starts
+    // one): its motors run until the pulse ends, whatever else the output sends meanwhile, and are not kept running.
+    static const bool ps4Title = ApplicationIsPs4_nid_no_patch();
+    const auto pulseLeft = ps4Title && now < pulseEnd ? static_cast<Uint32>(std::chrono::duration_cast<std::chrono::milliseconds>(pulseEnd - now).count()) + 1u : 0u;
+    const auto vibrationLarge = ps4Title && pulseLeft == 0 ? std::uint8_t{0} : outputState.vibrationLarge;
+    const auto vibrationSmall = ps4Title && pulseLeft == 0 ? std::uint8_t{0} : outputState.vibrationSmall;
+    const auto large = isPs5 ? vibrationLarge : std::max(vibrationLarge, outputState.audioVibrationLarge);
+    const auto small = isPs5 ? vibrationSmall : std::max(vibrationSmall, outputState.audioVibrationSmall);
     const bool rumbling = large != 0 || small != 0;
     const bool triggerRumble = outputState.trigger[0].fallback != 0 || outputState.trigger[1].fallback != 0;
     if (!outputPending) {
-        if ((rumbling || (triggerRumble && !isPs5)) && now >= nextRumbleRefresh) outputPending = true;
+        if (((rumbling && !ps4Title) || (triggerRumble && !isPs5)) && now >= nextRumbleRefresh) outputPending = true;
         else return;
     }
     outputPending = false;
     nextRumbleRefresh = now + std::chrono::milliseconds(700);
-    constexpr Uint32 rumbleMs = 2000;
-    SDL_GameControllerRumble(controller, static_cast<Uint16>(large * 257), static_cast<Uint16>(small * 257), rumbling ? rumbleMs : 0);
+    SDL_GameControllerRumble(controller, static_cast<Uint16>(large * 257), static_cast<Uint16>(small * 257), !rumbling ? 0 : pulseLeft != 0 ? pulseLeft : rumbleMs);
     if (SDL_GameControllerHasLED(controller) == SDL_TRUE) {
         if (outputState.lightBarValid) SDL_GameControllerSetLED(controller, outputState.lightBar[0], outputState.lightBar[1], outputState.lightBar[2]);
         else SDL_GameControllerSetLED(controller, 0, 64, 255);

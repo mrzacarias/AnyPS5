@@ -48,6 +48,8 @@ struct PadOutputState {
     bool triggerTouched = false;
     bool motionEnabled = true;
     int vibrationMode = 0;
+    // The vibration pulses a PS4 title has started (Pad::SetVibration with `pulse`).
+    std::uint32_t vibrationPulses = 0;
 };
 
 namespace Pad {
@@ -55,7 +57,9 @@ void Initialize();
 bool IsInitialized();
 PadData ReadState();
 int Read(PadData* data, int num);
-void SetVibration(std::uint8_t large, std::uint8_t small);
+// A pulse (a PS4 title's vibration, which lasts only while the title sets it again) restarts even at the values
+// already set.
+void SetVibration(std::uint8_t large, std::uint8_t small, bool pulse = false);
 void SetVibrationMode(int mode);
 void SetLightBar(bool valid, std::uint8_t r, std::uint8_t g, std::uint8_t b);
 void SetTriggerCommand(int trigger, const std::uint8_t* command);

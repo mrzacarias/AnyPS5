@@ -231,11 +231,12 @@ int Pad::Read(PadData* data, int num) {
     return count;
 }
 
-void Pad::SetVibration(std::uint8_t large, std::uint8_t small) {
+void Pad::SetVibration(std::uint8_t large, std::uint8_t small, bool pulse) {
     std::lock_guard lock(stateMutex);
-    if (output.vibrationLarge == large && output.vibrationSmall == small) return;
+    if (!pulse && output.vibrationLarge == large && output.vibrationSmall == small) return;
     output.vibrationLarge = large;
     output.vibrationSmall = small;
+    if (pulse) ++output.vibrationPulses;
     ++output.sequence;
 }
 

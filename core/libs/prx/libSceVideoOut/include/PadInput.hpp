@@ -35,6 +35,8 @@ private:
     PadOutputState outputState{};
     bool outputPending = false;
     std::chrono::steady_clock::time_point nextRumbleRefresh{};
+    // When a PS4 title's last vibration pulse ends.
+    std::chrono::steady_clock::time_point pulseEnd{};
 };
 
 #endif
