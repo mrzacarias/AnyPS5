@@ -55,7 +55,9 @@ std::vector<std::uint8_t> GuestModuleWriter::WriteLinux(const Relinker::GuestIma
             Io::WriteU32(symbols, index * 24, addString("__tls_get_addr"));
             needsTlsResolver = true;
         }
-        if (symbol.Section == 0 && (symbol.Info >> 4) == 2) symbols[index * 24 + 4] = static_cast<std::uint8_t>(0x10 | (symbol.Info & 15));
+        // A weak import that names no library (no '#'), such as module_start in old SDK modules, has no provider on
+        // the console and stays weak, so it binds to null; the other weak imports bind like global ones.
+        if (symbol.Section == 0 && (symbol.Info >> 4) == 2 && symbol.QualifiedName.find('#') != std::string::npos) symbols[index * 24 + 4] = static_cast<std::uint8_t>(0x10 | (symbol.Info & 15));
     }
     std::vector<std::uint64_t> needed;
     for (const auto& dependency : dependencies) needed.push_back(addString(dependency));

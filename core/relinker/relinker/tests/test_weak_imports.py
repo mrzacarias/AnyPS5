@@ -1,4 +1,5 @@
-"""Check that weak undefined imports stay weak on Linux and bind to null on Windows when no module exports them."""
+"""Check that weak undefined imports stay weak on Linux and bind to null on Windows when no module exports them, and
+that a guest module keeps weak only the imports that name no library."""
 
 import os
 import struct
@@ -7,6 +8,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+from test_guest_export_lookup import guest_symbols
+from test_guest_intel_trampolines import main_fixture
+from test_guest_symbol_names import dynamic_tags, file_offset, symbol_name
 from test_windows_import_modules import executable, provider
 
 SHT_DYNSYM = 11
@@ -37,6 +41,13 @@ def import_bindings(elf):
     return bindings
 
 
+def module_bindings(image):
+    tags = dynamic_tags(image)
+    count, = struct.unpack_from('<I', image, file_offset(image, tags[4]) + 4)
+    symbols = file_offset(image, tags[6])
+    return {symbol_name(image, tags, index): image[symbols + index * 24 + 4] >> 4 for index in range(1, count)}
+
+
 def main():
     relinker = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix='anyps5-weak-imports-') as directory:
@@ -52,6 +63,16 @@ def main():
             assert result.returncode == 0, (name, result.stdout, result.stderr)
             bindings = import_bindings(output.read_bytes())
             assert bindings.get(symbol) == expected, (name, bindings)
+
+        # module_start in old SDK modules names no library: it stays weak and binds to null.
+        case = work / 'guest-module'
+        (case / 'sce_module').mkdir(parents=True)
+        (case / 'sce_module' / 'consumer.prx').write_bytes(guest_symbols([('module_start', 0x20, 0, 0), ('absent#A#B', 0x22, 0, 0)]))
+        (case / 'input.elf').write_bytes(main_fixture())
+        result = subprocess.run([str(relinker), str(case / 'input.elf'), str(case / 'output.elf')], capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        bindings = module_bindings((case / 'app0/sce_module/consumer.prx.guest.prx').read_bytes())
+        assert bindings == {'module_start': STB_WEAK, 'absent': STB_GLOBAL}, bindings
 
         for name, symbol, expected in (('windows-weak-missing', 'absent#A#B', 33),
                                        ('windows-weak-present', 'shared#A#B', 11)):
