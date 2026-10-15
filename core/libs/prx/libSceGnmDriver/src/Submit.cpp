@@ -5,9 +5,11 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -17,6 +19,13 @@ constexpr std::uint32_t PrepareFlip = 0x68750777u;
 constexpr std::uint32_t PrepareFlipLabel = 0x68750778u;
 constexpr std::uint32_t OpcodeWriteData = 0x37;
 constexpr std::uint32_t WriteDataToMemory = 0x500u;
+
+constexpr std::uint32_t OpcodeWriteConstRam = 0x81;
+constexpr std::uint32_t OpcodeDumpConstRam = 0x83;
+constexpr std::uint32_t OpcodeIncrementCeCounter = 0x84;
+constexpr std::uint32_t OpcodeIncrementDeCounter = 0x85;
+constexpr std::uint32_t OpcodeWaitOnCeCounter = 0x86;
+constexpr std::uint32_t OpcodeWaitOnDeCounterDiff = 0x88;
 
 void checkBuffers(std::uint32_t count, std::uint32_t* const* dcbAddresses, const std::uint32_t* dcbBytes, std::uint32_t* const* ccbAddresses, const std::uint32_t* ccbBytes) {
     if (count == 0 || dcbAddresses == nullptr || dcbBytes == nullptr) throw std::runtime_error("Gnm submit: no draw command buffers");
@@ -28,15 +37,70 @@ void checkBuffers(std::uint32_t count, std::uint32_t* const* dcbAddresses, const
     if (ccbBytes == nullptr) return;
     AgcDriverCheckGuestMemory_nid_postfix(ccbBytes, count * sizeof(*ccbBytes), alignof(std::uint32_t));
     for (std::uint32_t index = 0; index < count; ++index) {
-        if (ccbBytes[index] != 0) throw std::runtime_error("Gnm submit: constant command buffers are not implemented");
+        if (ccbBytes[index] == 0) continue;
+        if (ccbAddresses == nullptr || ccbBytes[index] % sizeof(std::uint32_t) != 0) throw std::runtime_error("Gnm submit: invalid constant command buffer " + std::to_string(index));
+        AgcDriverCheckGuestMemory_nid_postfix(ccbAddresses, count * sizeof(*ccbAddresses), alignof(std::uint32_t*));
+        AgcDriverCheckGuestMemory_nid_postfix(ccbAddresses[index], ccbBytes[index], alignof(std::uint32_t));
     }
-    static_cast<void>(ccbAddresses);
 }
 
-void submit(std::uint32_t count, std::uint32_t* const* dcbAddresses, const std::uint32_t* dcbBytes) {
+std::uint32_t packetWords(std::uint32_t header, std::uint32_t remaining, const char* buffer) {
+    // A type 2 packet is a one-word filler; the others give their body length.
+    const auto words = (header >> 30u) == 2u ? 1u : (header >> 30u) == 3u ? ((header >> 16u) & 0x3fffu) + 2u : 0u;
+    if (words == 0 || words > remaining) throw std::runtime_error(std::string("Gnm submit: malformed packet in the ") + buffer);
+    return words;
+}
+
+// The PS4 constant engine runs the constant command buffer beside the draw one: it fills constant RAM and dumps it to
+// memory, and the two meet at counters (the draw engine's WAIT_ON_CE_COUNTER waits until the constant engine has
+// counted past the draw engine's INCREMENT_DE_COUNTER count). In one stream each wait becomes the constant packets up to
+// the increment it waits for; the draw engine runs the constant RAM packets itself, as on the PS5, and the constant
+// engine is never ahead, so its WAIT_ON_DE_COUNTER_DIFF holds nothing.
+std::vector<std::uint32_t> mergeConstantEngine(const std::uint32_t* dcb, std::uint32_t dcbWords, const std::uint32_t* ccb, std::uint32_t ccbWords) {
+    std::vector<std::uint32_t> merged;
+    merged.reserve(dcbWords + ccbWords);
+    std::uint32_t constantCursor = 0;
+    std::uint64_t constantCount = 0;
+    std::uint64_t drawCount = 0;
+    const auto runConstantEngine = [&](bool toEnd) {
+        while (constantCursor < ccbWords && (toEnd || constantCount <= drawCount)) {
+            const auto header = ccb[constantCursor];
+            const auto words = packetWords(header, ccbWords - constantCursor, "constant command buffer");
+            const auto opcode = (header >> 30u) == 3u ? (header >> 8u) & 0xffu : GnmDriver::OpcodeNop;
+            if (opcode == OpcodeWriteConstRam || opcode == OpcodeDumpConstRam) merged.insert(merged.end(), ccb + constantCursor, ccb + constantCursor + words);
+            else if (opcode == OpcodeIncrementCeCounter) ++constantCount;
+            else if (opcode != GnmDriver::OpcodeNop && opcode != OpcodeWaitOnDeCounterDiff) {
+                char message[96];
+                std::snprintf(message, sizeof(message), "Gnm submit: constant engine packet 0x%02x is not implemented", opcode);
+                throw std::runtime_error(message);
+            }
+            constantCursor += words;
+        }
+    };
+    for (std::uint32_t cursor = 0; cursor < dcbWords;) {
+        const auto header = dcb[cursor];
+        const auto words = packetWords(header, dcbWords - cursor, "draw command buffer");
+        const auto opcode = (header >> 30u) == 3u ? (header >> 8u) & 0xffu : GnmDriver::OpcodeNop;
+        if (opcode == OpcodeWaitOnCeCounter) runConstantEngine(false);
+        else if (opcode == OpcodeIncrementDeCounter) ++drawCount;
+        else merged.insert(merged.end(), dcb + cursor, dcb + cursor + words);
+        cursor += words;
+    }
+    runConstantEngine(true);
+    return merged;
+}
+
+void submit(std::uint32_t count, std::uint32_t* const* dcbAddresses, const std::uint32_t* dcbBytes, std::uint32_t* const* ccbAddresses, const std::uint32_t* ccbBytes) {
     AgcDriverUseGcnShaders_nid_postfix();
     for (std::uint32_t index = 0; index < count; ++index) {
-        const Packet packet{dcbAddresses[index], dcbBytes[index] / static_cast<std::uint32_t>(sizeof(std::uint32_t)), 0, {}};
+        const auto words = dcbBytes[index] / static_cast<std::uint32_t>(sizeof(std::uint32_t));
+        if (ccbBytes != nullptr && ccbBytes[index] != 0) {
+            auto merged = mergeConstantEngine(dcbAddresses[index], words, ccbAddresses[index], ccbBytes[index] / static_cast<std::uint32_t>(sizeof(std::uint32_t)));
+            const Packet packet{merged.data(), static_cast<std::uint32_t>(merged.size()), 0, {}};
+            AgcDriverSubmit_nid_postfix(&packet, 0);
+            continue;
+        }
+        const Packet packet{dcbAddresses[index], words, 0, {}};
         AgcDriverSubmit_nid_postfix(&packet, 0);
     }
 }
@@ -63,7 +127,7 @@ void patchFlip(std::uint32_t* dcb, std::uint32_t words, std::uint32_t videoOutHa
 int submitAndFlip(std::uint32_t count, std::uint32_t* const* dcbAddresses, const std::uint32_t* dcbBytes, std::uint32_t* const* ccbAddresses, const std::uint32_t* ccbBytes, std::uint32_t videoOutHandle, std::uint32_t displayBufferIndex, std::uint32_t flipMode, std::int64_t flipArgument) {
     checkBuffers(count, dcbAddresses, dcbBytes, ccbAddresses, ccbBytes);
     patchFlip(dcbAddresses[count - 1], dcbBytes[count - 1] / static_cast<std::uint32_t>(sizeof(std::uint32_t)), videoOutHandle, displayBufferIndex, flipMode, flipArgument);
-    submit(count, dcbAddresses, dcbBytes);
+    submit(count, dcbAddresses, dcbBytes, ccbAddresses, ccbBytes);
     return 0;
 }
 
@@ -73,7 +137,7 @@ extern "C" {
 
 int APS5_VABI sceGnmSubmitCommandBuffers(std::uint32_t count, std::uint32_t* const* dcbAddresses, const std::uint32_t* dcbBytes, std::uint32_t* const* ccbAddresses, const std::uint32_t* ccbBytes) {
     checkBuffers(count, dcbAddresses, dcbBytes, ccbAddresses, ccbBytes);
-    submit(count, dcbAddresses, dcbBytes);
+    submit(count, dcbAddresses, dcbBytes, ccbAddresses, ccbBytes);
     return 0;
 }
 
