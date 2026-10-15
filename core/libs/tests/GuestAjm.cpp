@@ -41,6 +41,9 @@ int APS5_VABI sceAjmBatchJobSetResampleParameters(AjmBatchInfo*, std::uint32_t, 
 int APS5_VABI sceAjmBatchJobGetResampleInfo(AjmBatchInfo*, std::uint32_t, void*);
 int APS5_VABI sceAjmBatchJobSetResampleParametersEx(AjmBatchInfo*, std::uint32_t, float, float, std::uint32_t, void*);
 int APS5_VABI sceAjmBatchJobDecodeSplit(AjmBatchInfo*, std::uint32_t, const AjmBuffer*, std::size_t, const AjmBuffer*, std::size_t, void*);
+void* APS5_VABI sceAjmBatchJobControlBufferRa(void*, std::uint32_t, std::uint64_t, const void*, std::size_t, void*, std::size_t, void*);
+void* APS5_VABI sceAjmBatchJobRunSplitBufferRa(void*, std::uint32_t, std::uint64_t, const AjmBuffer*, std::size_t, const AjmBuffer*, std::size_t, void*, std::size_t, void*);
+int APS5_VABI sceAjmBatchStartBuffer(std::uint32_t, void*, std::uint32_t, int, AjmBatchError*, std::uint32_t*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -685,6 +688,28 @@ constexpr std::uint64_t CONTROL_RESET = 1ull << 13;
 constexpr std::uint64_t CONTROL_INITIALIZE = 1ull << 14;
 constexpr std::uint64_t SIDEBAND_GAPLESS_DECODE = 1ull << 45;
 constexpr std::uint64_t CONTROL_START = CONTROL_RESET | CONTROL_INITIALIZE | SIDEBAND_GAPLESS_DECODE;
+constexpr std::uint64_t SIDEBAND_STREAM = 1ull << 47;
+
+// The SDK 1.x calls write each job at a pointer and return the pointer after it; StartBuffer runs the bytes between.
+void TestBufferBatch(std::uint32_t context) {
+    std::uint32_t instance = 0;
+    Require(sceAjmInstanceCreate(context, 0, 0, &instance) == 0);
+    std::vector<std::uint8_t> batch(0x100);
+    std::vector<std::int16_t> pcm(1152 * 6);
+    std::int32_t reset[2] = {-1, -1};
+    DecodeSideband sideband{};
+    const AjmBuffer input{const_cast<std::uint8_t*>(MP3_MONO), sizeof(MP3_MONO)};
+    const AjmBuffer output{pcm.data(), pcm.size() * sizeof(std::int16_t)};
+    auto* end = static_cast<std::uint8_t*>(sceAjmBatchJobControlBufferRa(batch.data(), instance, CONTROL_RESET, nullptr, 0, reset, sizeof(reset), nullptr));
+    Require(end != nullptr && end > batch.data());
+    end = static_cast<std::uint8_t*>(sceAjmBatchJobRunSplitBufferRa(end, instance, SIDEBAND_STREAM, &input, 1, &output, 1, &sideband, sizeof(sideband), nullptr));
+    Require(end != nullptr && end <= batch.data() + batch.size());
+    AjmBatchError error{};
+    std::uint32_t id = 0;
+    Require(sceAjmBatchStartBuffer(context, batch.data(), static_cast<std::uint32_t>(end - batch.data()), 0, &error, &id) == 0 && sceAjmBatchWait(context, id, 0, &error) == 0);
+    Require(reset[0] == 0 && sideband.result == 0 && sideband.inputConsumed == 96 && sideband.outputWritten == 1152 * 2 && sideband.totalDecodedSamples == 1152);
+    Require(sceAjmInstanceDestroy(context, instance) == 0);
+}
 
 struct At9Control {
     GaplessDecode gapless;
@@ -1260,6 +1285,7 @@ int main() {
     TestOpusInputBeyondStatedData(context, true);
     TestDecodeSingle(context);
     TestDecodeSplit(context);
+    TestBufferBatch(context);
     TestGaplessDecode(context);
     TestCodecInfo(context);
     TestGetInfo(context);

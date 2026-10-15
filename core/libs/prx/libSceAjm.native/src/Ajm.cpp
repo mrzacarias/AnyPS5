@@ -14,6 +14,7 @@ extern "C" {
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -1459,6 +1460,29 @@ int APS5_VABI sceAjmBatchStart(uint32_t context, const AjmBatchInfo* info, int p
     }
     *batch = id;
     return 0;
+}
+
+// The SDK 1.x batch calls write each job at a pointer and return the pointer after it; a batch is the bytes from its
+// first job to the last pointer. Jobs keep this library's records, which are never longer than the console's chunks
+// (a control job 48 bytes against 48 to 64, a run job 32 bytes plus 16 a buffer against 32 or 48 plus 16 a buffer).
+// The return address only names the caller in console error dumps.
+void* APS5_VABI sceAjmBatchJobControlBufferRa(void* buffer, uint32_t instance, uint64_t flags, const void* sideband_input, size_t sideband_input_size, void* sideband_output, size_t sideband_output_size, void* return_address) {
+    (void)return_address;
+    AjmBatchInfo info{buffer, 0, std::numeric_limits<std::uint64_t>::max()};
+    if (sceAjmBatchJobControl(&info, instance, flags, sideband_input, sideband_input_size, sideband_output, sideband_output_size) != 0) return nullptr;
+    return static_cast<std::uint8_t*>(buffer) + info.offset;
+}
+
+void* APS5_VABI sceAjmBatchJobRunSplitBufferRa(void* buffer, uint32_t instance, uint64_t flags, const AjmBuffer* input_buffers, size_t input_buffers_num, const AjmBuffer* output_buffers, size_t output_buffers_num, void* sideband_output, size_t sideband_output_size, void* return_address) {
+    (void)return_address;
+    AjmBatchInfo info{buffer, 0, std::numeric_limits<std::uint64_t>::max()};
+    if (sceAjmBatchJobRunSplit(&info, instance, flags, input_buffers, input_buffers_num, output_buffers, output_buffers_num, sideband_output, sideband_output_size) != 0) return nullptr;
+    return static_cast<std::uint8_t*>(buffer) + info.offset;
+}
+
+int APS5_VABI sceAjmBatchStartBuffer(uint32_t context, void* batch_buffer, uint32_t batch_size, int priority, AjmBatchError* error, uint32_t* batch) {
+    const AjmBatchInfo info{batch_buffer, batch_size, batch_size};
+    return sceAjmBatchStart(context, &info, priority, error, batch);
 }
 
 int APS5_VABI sceAjmBatchWait(uint32_t context, uint32_t batch, uint32_t timeout, AjmBatchError* error) {
