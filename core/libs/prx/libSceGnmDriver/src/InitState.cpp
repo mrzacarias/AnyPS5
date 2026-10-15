@@ -15,6 +15,36 @@ constexpr std::array<std::uint32_t, 12> ClearContextState{
     0x2ec47fc0u, 0xffffffffu, 0u, 0u, 0u, 10u,
 };
 
+constexpr std::array<std::uint32_t, 0x73> InitSequence{
+    0xc0017600u, 0x216u, 0xffffffffu, 0xc0017600u, 0x217u, 0xffffffffu,
+    0xc0017600u, 0x215u, 0u, 0xc0016900u, 0x2f9u, 0x2du,
+    0xc0016900u, 0x282u, 8u, 0xc0016900u, 0x280u, 0x80008u,
+    0xc0016900u, 0x281u, 0xffff0000u, 0xc0016900u, 0x204u, 0u,
+    0xc0016900u, 0x206u, 0x43fu, 0xc0016900u, 0x83u, 0xffffu,
+    0xc0016900u, 0x317u, 0x10u, 0xc0016900u, 0x2fau, 0x3f800000u,
+    0xc0016900u, 0x2fcu, 0x3f800000u, 0xc0016900u, 0x2fbu, 0x3f800000u,
+    0xc0016900u, 0x2fdu, 0x3f800000u, 0xc0016900u, 0x202u, 0xcc0010u,
+    0xc0016900u, 0x30eu, 0xffffffffu, 0xc0016900u, 0x30fu, 0xffffffffu,
+    0xc0002f00u, 1u, 0xc0017600u, 7u, 0x1ffu, 0xc0017600u,
+    0x46u, 0x1ffu, 0xc0017600u, 0x87u, 0x1ffu, 0xc0017600u,
+    0xc7u, 0x1ffu, 0xc0017600u, 0x107u, 0u, 0xc0017600u,
+    0x147u, 0x1ffu, 0xc0016900u, 0x1b1u, 2u, 0xc0016900u,
+    0x101u, 0u, 0xc0016900u, 0x100u, 0xffffffffu, 0xc0016900u,
+    0x103u, 0u, 0xc0016900u, 0x284u, 0u, 0xc0016900u,
+    0x290u, 0u, 0xc0016900u, 0x2aeu, 0u, 0xc0016900u,
+    0x292u, 0u, 0xc0016900u, 0x293u, 0x6000000u, 0xc0016900u,
+    0x2f8u, 0u, 0xc0016900u, 0x2deu, 0x1e9u, 0xc0036900u,
+    0x295u, 0x100u, 0x100u, 4u, 0xc0017900u, 0x200u,
+    0xe0000000u,
+};
+
+// The SDK 1.75 state: the 1.x one with PA_SC_MODE_CNTL_1 (0x293) also setting bit 17.
+constexpr auto InitSequence175 = [] {
+    auto sequence = InitSequence;
+    sequence[100] = 0x6020000u;
+    return sequence;
+}();
+
 constexpr std::array<std::uint32_t, 0x7c> InitSequence350{
     0xc0017600u, 0x216u, 0xffffffffu, 0xc0017600u, 0x217u, 0xffffffffu,
     0xc0017600u, 0x215u, 0u, 0xc0016900u, 0x2f9u, 0x2du,
@@ -59,20 +89,34 @@ constexpr std::array<std::uint32_t, 0x62> ContextInitSequence400{
     0xc09e1000u, 0u,
 };
 
-}
-
-extern "C" {
-
-std::uint32_t APS5_VABI sceGnmDrawInitDefaultHardwareState350(std::uint32_t* command, std::uint32_t words) {
+template <std::size_t Size>
+std::uint32_t writeHardwareInit(std::uint32_t* command, std::uint32_t words, const std::array<std::uint32_t, Size>& sequence) {
     if (words < HardwareInitWords) return 0;
     AgcDriverCheckGuestMemory_nid_postfix(command, HardwareInitWords * sizeof(std::uint32_t), alignof(std::uint32_t), true);
     auto* cursor = command;
     std::memcpy(cursor, ClearContextState.data(), sizeof(ClearContextState));
     cursor += ClearContextState.size();
-    std::memcpy(cursor, InitSequence350.data(), sizeof(InitSequence350));
-    cursor += InitSequence350.size();
+    std::memcpy(cursor, sequence.data(), sizeof(sequence));
+    cursor += sequence.size();
     GnmDriver::WriteNop(cursor, static_cast<std::uint32_t>(command + HardwareInitWords - cursor));
     return HardwareInitWords;
+}
+
+}
+
+extern "C" {
+
+// The SDK 1.x name of the hardware state the 350 version writes, with the older shader register defaults.
+std::uint32_t APS5_VABI sceGnmDrawInitDefaultHardwareState(std::uint32_t* command, std::uint32_t words) {
+    return writeHardwareInit(command, words, InitSequence);
+}
+
+std::uint32_t APS5_VABI sceGnmDrawInitDefaultHardwareState175(std::uint32_t* command, std::uint32_t words) {
+    return writeHardwareInit(command, words, InitSequence175);
+}
+
+std::uint32_t APS5_VABI sceGnmDrawInitDefaultHardwareState350(std::uint32_t* command, std::uint32_t words) {
+    return writeHardwareInit(command, words, InitSequence350);
 }
 
 std::uint32_t APS5_VABI sceGnmDrawInitToDefaultContextState400(std::uint32_t* command, std::uint32_t words) {

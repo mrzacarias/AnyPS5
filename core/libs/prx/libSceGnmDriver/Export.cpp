@@ -470,6 +470,34 @@ int APS5_VABI sceRazorCaptureImmediate(void) {
     return {};
 }
 
+// Razor GPU captures, command buffer validation and SQ counters need a development kit; retail firmware refuses them.
+static constexpr int SCE_GNM_ERROR_VALIDATION_NOT_ENABLED = static_cast<int>(0x80D13FFF);
+static constexpr int SCE_GNM_ERROR_CAPTURE_FAILED_INTERNAL = static_cast<int>(0x80D1500F);
+
+int APS5_VABI sceRazorCaptureSinceLastFlip(void) {
+    return SCE_GNM_ERROR_CAPTURE_FAILED_INTERNAL;
+}
+
+int APS5_VABI sceRazorCaptureCommandBuffersOnlyImmediate(void) {
+    return SCE_GNM_ERROR_CAPTURE_FAILED_INTERNAL;
+}
+
+int APS5_VABI sceRazorCaptureCommandBuffersOnlySinceLastFlip(void) {
+    return SCE_GNM_ERROR_CAPTURE_FAILED_INTERNAL;
+}
+
+int APS5_VABI sceGnmValidateCommandBuffers(void) {
+    return SCE_GNM_ERROR_VALIDATION_NOT_ENABLED;
+}
+
+int APS5_VABI sceGnmSetSpiEnableSqCounters(void) {
+    return SCE_GNM_ERROR_FAILURE;
+}
+
+int APS5_VABI sceGnmSetSpiEnableSqCountersForUnitInstance(void) {
+    return SCE_GNM_ERROR_FAILURE;
+}
+
 
 std::int32_t APS5_VABI sceGnmDispatchIndirectOnMec(std::uint32_t* cmdbuf, std::uint32_t size, std::uint64_t args, std::uint32_t modifier) {
     static_cast<void>(cmdbuf);

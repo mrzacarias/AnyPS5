@@ -70,6 +70,13 @@ std::uint32_t modified(std::uint32_t rsrc1, std::uint32_t modifier, std::uint32_
 
 extern "C" {
 
+int APS5_VABI sceGnmSetCsShaderWithModifier(std::uint32_t* command, std::uint32_t words, const std::uint32_t* registers, std::uint32_t modifier);
+
+// The SDK 1.x setter: no modifier.
+int APS5_VABI sceGnmSetCsShader(std::uint32_t* command, std::uint32_t words, const std::uint32_t* registers) {
+    return sceGnmSetCsShaderWithModifier(command, words, registers, 0u);
+}
+
 int APS5_VABI sceGnmSetCsShaderWithModifier(std::uint32_t* command, std::uint32_t words, const std::uint32_t* registers, std::uint32_t modifier) {
     if (command == nullptr || words <= 0x18 || registers == nullptr || (modifier & 0xfffffc3fu) != 0 || registers[1] != 0) return -1;
     checkCommand(command, 0x19);
@@ -112,6 +119,17 @@ int APS5_VABI sceGnmSetPsShader350(std::uint32_t* command, std::uint32_t words, 
     if (registers[1] != 0) return -1;
     checkCommand(command, 0x28);
     padding(writePixelShader(command, registers, 0u));
+    return 0;
+}
+
+// The SDK 1.x setter: as the 350 one, except that unbinding the pixel shader leaves CB_SHADER_MASK alone.
+int APS5_VABI sceGnmSetPsShader(std::uint32_t* command, std::uint32_t words, const std::uint32_t* registers) {
+    if (command == nullptr || words <= 0x27) return -1;
+    if (registers != nullptr) return sceGnmSetPsShader350(command, words, registers);
+    checkCommand(command, 0x28);
+    command = GnmDriver::WriteShRegisters(command, 8u, 0u, 0u);
+    command = GnmDriver::WriteContextRegisters(command, 0x203u, 0u);
+    GnmDriver::WriteNop(command, 0x21);
     return 0;
 }
 
