@@ -2817,7 +2817,8 @@ void WriteFrameBmp(int index, std::uint32_t fullWidth, std::uint32_t fullHeight,
 
 ResidentPresent ResidentPresentable(const Graphics::Context& context, const Graphics::StorageTexture& image, const DisplayBuffer& buffer, VkFilter& filter, std::uint32_t& layer) {
     const auto& descriptor = image.Descriptor();
-    if (descriptor.width != buffer.width || descriptor.height != buffer.height || descriptor.mipCount != 1 || image.ImageDepth() != 1) return ResidentPresent::None;
+    const bool ps4DisplayTiled = descriptor.tileMode == Graphics::TextureTileMode::kPs4Display2D && buffer.tilingMode == DisplayTilingPs4Display2dThin;
+    if (!ResidentPresentExtent(descriptor.width, descriptor.height, ps4DisplayTiled, buffer.width, buffer.height, buffer.pitchInPixel == 0 ? buffer.width : buffer.pitchInPixel) || descriptor.mipCount != 1 || image.ImageDepth() != 1) return ResidentPresent::None;
     const auto slice = ResidentPresentSlice(descriptor.baseAddress, image.GuestBytes(), image.ImageLayers(), buffer.address, DisplayBufferSize(buffer));
     if (!slice) return ResidentPresent::None;
     layer = *slice;
@@ -2839,6 +2840,20 @@ std::shared_ptr<Graphics::StorageTexture> PresentableResident(const Graphics::Co
     if (path == ResidentPresent::None) resident.reset();
     convert = path == ResidentPresent::Convert;
     return resident;
+}
+
+// A PS4 display-tiled buffer is shown from the pending render target that holds it when that target has
+// the same PS4 display tiling; any other PS4 buffer is read through guest memory.
+bool NoResidentPresent();
+
+bool Ps4DisplayResident(const Graphics::Context& context, const DisplayBuffer& buffer) {
+    if (buffer.tilingMode != DisplayTilingPs4Display2dThin || NoResidentPresent()) return false;
+    VkFilter filter = VK_FILTER_LINEAR;
+    bool pending = false;
+    bool convert = false;
+    std::uint32_t layer = 0;
+    const auto resident = PresentableResident(context, buffer, filter, pending, convert, layer);
+    return resident != nullptr && resident->Descriptor().tileMode == Graphics::TextureTileMode::kPs4Display2D;
 }
 
 Graphics::DccKeys ResidentKeys(const Graphics::StorageTexture& resident) {
@@ -2925,7 +2940,7 @@ bool VulkanDevice::PresentDisplayBuffer(const DisplayBuffer& buffer) {
     auto& dumps = Dumps();
     const bool passthrough = state->surfaceColorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT;
     require(!passthrough || DisplayPq(buffer.pixelFormat), "only a PQ display buffer is presented to the HDR10 swapchain");
-    if (buffer.tilingMode != 0) {
+    if (buffer.tilingMode != 0 && (passthrough || !Ps4DisplayResident(graphicsContext(), buffer))) {
         if (passthrough) ensureHdrScaler(DisplayTexelFormat(buffer.pixelFormat));
         const auto pixels = passthrough ? ReadDisplayBufferTexels(buffer) : ReadDisplayBuffer(buffer);
         bool dumpFrame = false;
@@ -3296,7 +3311,7 @@ VulkanDevice::PresentStatistics VulkanDevice::PresentCounts() {
 
 bool VulkanDevice::PresentWaitsForSlots(const DisplayBuffer* buffer) const {
     if (buffer == nullptr || !state->SharedSlotInFlight()) return false;
-    if (buffer->tilingMode != 0) return true;
+    if (buffer->tilingMode != 0) return !Ps4DisplayResident(graphicsContext(), *buffer);
     if (NoResidentPresent()) return true;
     VkFilter filter = VK_FILTER_LINEAR;
     bool pending = false;

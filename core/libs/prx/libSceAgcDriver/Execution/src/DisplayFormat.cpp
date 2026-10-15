@@ -86,6 +86,12 @@ std::array<float, 4> PqClearColor(std::uint32_t word, bool redLow) {
     return redLow ? std::array<float, 4>{channel(0), channel(10), channel(20), 1.0f} : std::array<float, 4>{channel(20), channel(10), channel(0), 1.0f};
 }
 
+bool ResidentPresentExtent(std::uint32_t imageWidth, std::uint32_t imageHeight, bool ps4DisplayTiled, std::uint32_t displayWidth, std::uint32_t displayHeight, std::uint32_t displayPitch) {
+    if (imageWidth != displayWidth) return false;
+    if (imageHeight == displayHeight) return true;
+    return ps4DisplayTiled && imageHeight > displayHeight && displayPitch == imageWidth;
+}
+
 std::optional<std::uint32_t> ResidentPresentSlice(std::uint64_t imageAddress, std::uint64_t imageBytes, std::uint32_t slices, std::uint64_t displayAddress, std::uint64_t displayBytes) {
     if (slices == 0 || displayBytes == 0 || imageBytes % slices != 0 || imageBytes / slices != displayBytes || displayAddress < imageAddress) return std::nullopt;
     const auto offset = displayAddress - imageAddress;

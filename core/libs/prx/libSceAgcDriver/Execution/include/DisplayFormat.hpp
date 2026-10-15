@@ -23,6 +23,9 @@ std::optional<VkSurfaceFormatKHR> Hdr10SurfaceFormat(std::span<const VkSurfaceFo
 VkSurfaceFormatKHR DynamicRangeSurfaceFormat(std::span<const VkSurfaceFormatKHR> formats, std::uint64_t pixelFormat, bool hdrAvailable);
 std::array<float, 4> PqClearColor(std::uint32_t word, bool redLow);
 std::optional<std::uint32_t> ResidentPresentSlice(std::uint64_t imageAddress, std::uint64_t imageBytes, std::uint32_t slices, std::uint64_t displayAddress, std::uint64_t displayBytes);
+// Whether an image holds a display buffer's texels at the same coordinates: the same extent, or, for a PS4
+// display-tiled image (padded to whole macro tiles), the buffer's width and pitch with more rows below.
+bool ResidentPresentExtent(std::uint32_t imageWidth, std::uint32_t imageHeight, bool ps4DisplayTiled, std::uint32_t displayWidth, std::uint32_t displayHeight, std::uint32_t displayPitch);
 
 }
 

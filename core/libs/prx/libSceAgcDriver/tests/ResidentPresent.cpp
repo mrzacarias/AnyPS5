@@ -83,6 +83,16 @@ void sliceTests() {
     Require(!ResidentPresentSlice(image, 0, 0, image, slice) && !ResidentPresentSlice(image, slice, 1, image, 0), "an empty image or display buffer has a slice");
 }
 
+void extentTests() {
+    using AgcDriver::ResidentPresentExtent;
+    Require(ResidentPresentExtent(1920, 1080, false, 1920, 1080, 1920), "an image of the display's extent does not hold it");
+    Require(!ResidentPresentExtent(1920, 1088, false, 1920, 1080, 1920), "a taller image that is no PS4 display target holds the display");
+    Require(ResidentPresentExtent(1920, 1088, true, 1920, 1080, 1920), "a PS4 display target padded to whole macro tiles does not hold its display");
+    Require(!ResidentPresentExtent(1920, 1088, true, 1920, 1080, 2048), "a PS4 display target holds a display of another pitch");
+    Require(!ResidentPresentExtent(2048, 1088, true, 1920, 1080, 1920), "a wider PS4 display target holds the display");
+    Require(!ResidentPresentExtent(1920, 1072, true, 1920, 1080, 1920), "a shorter PS4 display target holds the display");
+}
+
 void conversionTest(const Context& context, std::uint64_t pixelFormat, VkFormat format, std::uint32_t layer = 0, float whiteNits = AgcDriver::SdrToneMapLuminanceNits) {
     constexpr std::uint32_t width = 200;
     constexpr std::uint32_t height = 130;
@@ -210,6 +220,7 @@ void conversionTest(const Context& context, std::uint64_t pixelFormat, VkFormat 
 void RunResidentPresentTests(const Context& context) {
     decisionTests();
     sliceTests();
+    extentTests();
     conversionTest(context, Bgra8 | TenBit, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
     conversionTest(context, Rgba8 | TenBit, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
     conversionTest(context, Bgra8 | TenBit, VK_FORMAT_A2R10G10B10_UNORM_PACK32);
