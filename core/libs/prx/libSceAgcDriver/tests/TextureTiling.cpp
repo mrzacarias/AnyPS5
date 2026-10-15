@@ -178,6 +178,13 @@ void RunTextureTilingTests() {
         reject([] { static_cast<void>(DescribeSurface(thickVolume(TextureTileMode::kPs4Thin2D, 56, 64, 64, 4, 1))); }, "2D-tiled or mipmapped PS4 3D textures");
     }
     {
+        // A PS4 1D-tiled 100x100 R8G8 texture (Limbo's button glyphs): 104x104 is 21632 bytes, so the pitch grows to 112
+        // for whole 256-byte pipe interleaves; level 1 (50x50) grows from 56 to 64.
+        const auto mips = ComputeMipLayout(TextureTileMode::kPs4Thin1D, 14, 100, 100, 2);
+        Require(mips[0].blocksPerRow == 14u && mips[0].pitchBytes == 224u && mips[0].tiledSize == 112u * 104u * 2u, "a PS4 1D-tiled level must pad its slice to whole pipe interleaves");
+        Require(mips[1].tiledOffset == 112u * 104u * 2u && mips[1].blocksPerRow == 8u && mips[1].tiledSize == 64u * 56u * 2u, "a PS4 1D-tiled mip must pad its slice to whole pipe interleaves");
+    }
+    {
         // A PS4 2D-tiled 32x32 RGBA8 texture: level 0 keeps its 128x64 macro tile however small it is; level 1 (16x16)
         // is 1D-tiled in 8x8 micro tiles right after it.
         const auto mips = ComputeMipLayout(TextureTileMode::kPs4Thin2D, 56, 32, 32, 2);

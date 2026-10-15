@@ -180,7 +180,8 @@ std::vector<TileMipLayout> ComputeLinearMipLayout(std::uint32_t bytesPerElement,
 
 // GCN keeps level 0 first and every level whole, aligned to its tile block (256 bytes at least); a level past the
 // first of a 2D-tiled surface narrower or shorter than a macro tile is 1D-tiled (addrlib
-// ComputeSurfaceMipLevelTileMode); level 0 keeps the macro tiling however small it is.
+// ComputeSurfaceMipLevelTileMode); level 0 keeps the macro tiling however small it is. A 1D-tiled level's pitch
+// makes its slices whole pipe interleaves (addrlib ComputeSurfaceInfoMicroTiled).
 std::vector<TileMipLayout> ComputePs4MipLayout(TextureTileMode tileMode, std::uint32_t bytesPerElement, std::uint32_t texelWidth, std::uint32_t texelHeight, std::uint32_t width, std::uint32_t height, std::uint32_t mipCount) {
     std::vector<TileMipLayout> mips(mipCount);
     std::uint64_t offset = 0;
@@ -191,8 +192,14 @@ std::vector<TileMipLayout> ComputePs4MipLayout(TextureTileMode tileMode, std::ui
         const auto macro = GetBlockLayout(tileMode, bytesPerElement);
         mip.oneDimension = IsPs4MacroTileMode(tileMode) && level != 0 && (mip.width < macro.blockWidth || mip.height < macro.blockHeight);
         const auto block = mip.oneDimension ? GetBlockLayout(Ps4OneDimensionMode(tileMode), bytesPerElement) : macro;
-        const auto paddedWidth = AlignUp(mip.width, block.blockWidth);
+        auto paddedWidth = AlignUp(mip.width, block.blockWidth);
         const auto paddedHeight = AlignUp(mip.height, block.blockHeight);
+        // A micro-tiled (1D) level widens its pitch a micro tile at a time until a slice (four for thick tiles) fills
+        // whole 256-byte pipe interleaves.
+        if (!IsPs4MacroTileMode(tileMode) || mip.oneDimension) {
+            const std::uint64_t thickness = tileMode == TextureTileMode::kPs4Thick1D ? 4u : 1u;
+            while (static_cast<std::uint64_t>(paddedWidth) * paddedHeight * bytesPerElement * thickness % 256u != 0u) paddedWidth += block.blockWidth;
+        }
         const std::uint64_t alignment = std::max(block.blockSize, 256u);
         offset = (offset + alignment - 1u) / alignment * alignment;
         mip.tiledOffset = offset;
