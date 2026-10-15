@@ -60,8 +60,6 @@ public:
     ~ShaderMemory();
     ShaderMemory(const ShaderMemory&) = delete;
     ShaderMemory& operator=(const ShaderMemory&) = delete;
-    ShaderMemory(ShaderMemory&& other) noexcept;
-    ShaderMemory& operator=(ShaderMemory&&) = delete;
     // Returns what the capture resolved (plan, snapshot, specialization) for
     // ShaderRecompiler::Recompile(request, capture), which then skips its own materialization. One
     // result per call: the draw path captures several stages on one ShaderMemory. With `handle`
@@ -89,6 +87,7 @@ private:
         void SetAll() { bits.fill(~std::uint64_t{0}); }
         void SetBlock(std::size_t index) { bits[index / 64u] |= ((std::uint64_t{1} << BlockWords) - 1u) << (index % 64u / BlockWords * BlockWords); }
         void Reset() { bits.fill(0u); }
+        void SetRun(std::size_t first, std::size_t count);
         [[nodiscard]] bool None() const;
         [[nodiscard]] bool All() const { return std::all_of(bits.begin(), bits.end(), [](std::uint64_t word) { return word == ~std::uint64_t{0}; }); }
         template<typename TRun>
@@ -109,8 +108,11 @@ private:
     };
 
     static bool read(void* context, std::uint64_t address, std::uint32_t* value);
+    static bool readWords(void* context, std::uint64_t address, std::uint32_t* values, std::uint64_t count);
     static bool accessible(void* context, std::uint64_t address, std::uint64_t bytes);
+    static bool pending(void* context, std::uint64_t address, std::uint64_t bytes);
     Page& page(std::uint64_t base);
+    [[nodiscard]] bool overlapsInitial(std::uint64_t begin, std::uint64_t end) const;
 
     // Regions given at construction (the registered shader's code and header), referenced as given:
     // the caller keeps them alive for as long as the capture is used.

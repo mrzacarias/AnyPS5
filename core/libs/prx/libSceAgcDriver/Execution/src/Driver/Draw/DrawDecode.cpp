@@ -2,6 +2,8 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Shaders/ShaderRegistry.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Diagnostics.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
+#include <algorithm>
+#include <spirv/unified1/spirv.hpp>
 
 namespace AgcDriver::DriverDetail {
 
@@ -24,6 +26,7 @@ void ReadUserWords(const QueueState& queue, DrawProgram& program, bool staticAbi
         Graphics::NoteRegisterRead(Graphics::RegisterBank::Shader, program.userDataBase + i);
         program.userData.push_back(staticAbi ? ReadGraphicsRegister(queue.shader, program.userDataBase + i) : readUserData(queue.shader, program.userDataBase + i));
     }
+    if ((program.binary.stage == ShaderRecompiler::ShaderStage::Vertex || program.binary.stage == ShaderRecompiler::ShaderStage::Fragment) && program.snapshot->header.empty() && program.snapshot->userDataTailRegister) program.tailContinuation = ReadUserDataTailContinuation(program.binary.code, program.firstUserSgpr, program.userData);
 }
 
 void InitializeMerged(const QueueState& queue, DrawProgram& program, std::uint32_t pointerBase, bool pointerRequired, bool staticAbi) {
@@ -32,7 +35,6 @@ void InitializeMerged(const QueueState& queue, DrawProgram& program, std::uint32
     program.mergedPointerRequired = pointerRequired;
     program.firstUserSgpr = 0;
     program.userData.insert(program.userData.begin(), 8, 0);
-    program.hiddenUserWords = 8;
     Graphics::NoteRegisterRead(Graphics::RegisterBank::Shader, pointerBase);
     Graphics::NoteRegisterRead(Graphics::RegisterBank::Shader, pointerBase + 1);
     if (staticAbi) return;
@@ -70,13 +72,12 @@ void DecodeGraphicsPrograms(DrawDecode& decoded, const QueueState& queue, const 
         DrawProgram result{
             {stage, address, std::span(snapshot.code).subspan(codeOffset), snapshot.headerAddress, snapshot.header},
             userDataBase,
-            8,
+            stage == Stage::Fragment ? 0u : 8u,
             {},
             {{{snapshot.codeAddress, std::as_bytes(std::span(snapshot.code))}, {snapshot.headerAddress, snapshot.header}}},
             program,
             codeOffset
         };
-        result.binary.codeHash = SnapshotCodeHash(snapshot, codeOffset);
         result.resourceRegister = rsrc2;
         result.nullPixel = nullPixel;
         ReadUserWords(queue, result, staticAbi);
@@ -115,7 +116,6 @@ void DecodeGraphicsPrograms(DrawDecode& decoded, const QueueState& queue, const 
                 require(rejection.empty(), rejection.c_str());
             }
             append(0x008, 1, Stage::Fragment, 0x00b, 0x00c, Role::Fragment);
-            programs.back().firstUserSgpr = 0;
         }
     }
 }
@@ -127,19 +127,25 @@ std::shared_ptr<DrawDecode> Driver::decodeDraw(const QueueState& queue, const Su
     product->pixel = Graphics::DecodePixelStageInfo(queue.context, Graphics::ExportMappings(product->state), Graphics::PixelProgramSkipped(queue));
     product->pixel.targetExportPacking = Graphics::ExportPackings(product->state);
     product->pixel.dualSourceBlend = product->state.dualSourceBlend;
+    product->pixel.reversedBlend = product->state.reversedBlend;
     product->pixel.alphaToCoverage = product->state.alphaToCoverage;
+    product->pixel.quadPixelMask = Graphics::QuadPixelMask(product->state);
+    product->pixel.quadSampleMask = Graphics::QuadSampleMasks(product->state);
+    if (product->pixel.stencilRefExportEnable && Graphics::StencilReferenceUnused(product->state)) {
+        const auto localDevice = device.Load();
+        const auto capabilities = localDevice == nullptr ? std::vector<std::uint32_t>{} : localDevice->Target().supportedCapabilities;
+        if (std::ranges::find(capabilities, static_cast<std::uint32_t>(spv::CapabilityStencilExportEXT)) == capabilities.end()) product->pixel.stencilRefExportEnable = false;
+    }
     if (product->pixel.ancillary) product->pixel.rasterPrimitive = Graphics::RasterPrimitiveOf(product->state);
     if (product->pixel.ancillary) product->pixel.layerExported = product->state.layerExports != 0;
+    product->pixel.ditheredAlphaToCoverage = product->state.ditheredAlphaToCoverage;
     return product;
 }
 
 void Driver::resolveDrawDecode(const QueueState& queue, const Submission& submission, std::shared_ptr<const DrawDecode>& decode, bool registerKey, std::uint64_t drawKey, bool profile) {
     if (decode == nullptr || verifyDrawRecipe()) {
         std::vector<Graphics::RegisterRead> readLog;
-        struct LogScope {
-            explicit LogScope(std::vector<Graphics::RegisterRead>* log) { Graphics::RegisterReadLog() = log; }
-            ~LogScope() { Graphics::RegisterReadLog() = nullptr; }
-        } logScope(verifyDrawRecipe() && registerKey ? &readLog : nullptr);
+        const Graphics::RegisterReadLogScope logScope(verifyDrawRecipe() && registerKey ? &readLog : nullptr);
         auto fresh = decodeDraw(queue, submission);
         if (verifyDrawRecipe() && registerKey) {
             std::uint64_t facadeMismatches = 0;

@@ -173,7 +173,8 @@ void _readFile(const Apr::ReadFileCommand& command) {
     stream.read(reinterpret_cast<char*>(command.destination), static_cast<std::streamsize>(command.size));
     if (stream.bad()) throw std::runtime_error("APR: read failed for " + file.path.string());
     const auto read = static_cast<std::uint64_t>(stream.gcount());
-    if (read != command.size) throw std::runtime_error("APR: read of " + file.path.string() + " at offset " + std::to_string(command.offset) + " returned " + std::to_string(read) + " of " + std::to_string(command.size) + " bytes");
+    if (read != command.size && (!stream.eof() || command.offset + read < std::filesystem::file_size(file.path))) throw std::runtime_error("APR: read of " + file.path.string() + " at offset " + std::to_string(command.offset) + " returned " + std::to_string(read) + " of " + std::to_string(command.size) + " bytes");
+    if (read != command.size) std::memset(reinterpret_cast<char*>(command.destination) + read, 0, static_cast<std::size_t>(command.size - read));
 #else
     const int descriptor = ::open(file.path.c_str(), O_RDONLY | O_CLOEXEC);
     if (descriptor < 0) throw std::runtime_error("APR: cannot open " + file.path.string() + ", errno=" + std::to_string(errno));
@@ -192,7 +193,9 @@ void _readFile(const Apr::ReadFileCommand& command) {
         read += static_cast<std::uint64_t>(count);
     }
     ::close(descriptor);
-    if (read != command.size) throw std::runtime_error("APR: read of " + file.path.string() + " at offset " + std::to_string(command.offset) + " returned " + std::to_string(read) + " of " + std::to_string(command.size) + " bytes, errno=" + std::to_string(error));
+    // As the stream read above: a read that ends at the end of the file gets zeros for the rest.
+    if (read != command.size && (error != 0 || command.offset + read < std::filesystem::file_size(file.path))) throw std::runtime_error("APR: read of " + file.path.string() + " at offset " + std::to_string(command.offset) + " returned " + std::to_string(read) + " of " + std::to_string(command.size) + " bytes, errno=" + std::to_string(error));
+    if (read != command.size) std::memset(reinterpret_cast<char*>(command.destination) + read, 0, static_cast<std::size_t>(command.size - read));
 #endif
 }
 

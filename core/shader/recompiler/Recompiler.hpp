@@ -3,6 +3,7 @@
 
 #include "RuntimeAbi.hpp"
 #include "PipelineSpecialization.hpp"
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -39,7 +40,6 @@ struct ShaderBinary {
     std::span<const std::uint32_t> code;
     std::uint64_t headerAddress;
     std::span<const std::byte> header;
-    std::uint64_t codeHash = 0;
 };
 
 struct ShaderComputeStageInfo {
@@ -122,6 +122,21 @@ enum class RasterPrimitive : std::uint8_t {
     Rectangle
 };
 
+namespace ReversedBlendCode {
+
+inline constexpr std::uint32_t Enable = 1u;
+inline constexpr std::uint32_t ColorShift = 8u;
+inline constexpr std::uint32_t SecondShift = 16u;
+inline constexpr std::uint32_t RouteBits = 2u;
+inline constexpr std::uint32_t RouteMask = 3u;
+inline constexpr std::uint32_t Routes = 0xffu;
+inline constexpr std::uint32_t Own = 0u;
+inline constexpr std::uint32_t Component0 = 1u;
+inline constexpr std::uint32_t Zero = 2u;
+inline constexpr std::uint32_t One = 3u;
+
+}
+
 struct ShaderPixelStageInfo {
     std::uint32_t interpolatorCount;
     std::array<std::uint32_t, 32> interpolatorSettings;
@@ -134,6 +149,7 @@ struct ShaderPixelStageInfo {
     bool posZ;
     bool posW;
     bool frontFace;
+    bool frontFaceAllBits;
     bool ancillary;
     bool sampleShading;
     bool noPerspective;
@@ -153,6 +169,10 @@ struct ShaderPixelStageInfo {
     bool stencilRefExportEnable;
     RasterPrimitive rasterPrimitive = RasterPrimitive::Triangle;
     bool layerExported = false;
+    bool ditheredAlphaToCoverage = false;
+    std::uint8_t quadPixelMask = 0xf;
+    std::array<std::uint16_t, 4> quadSampleMask{0xffffu, 0xffffu, 0xffffu, 0xffffu};
+    std::uint32_t reversedBlend = 0;
 };
 
 struct ShaderVertexBufferResource {
@@ -200,6 +220,7 @@ struct GuestContext {
     std::optional<ShaderVertexStageInfo> vertex;
     std::span<const MemoryRegion> memory;
     std::optional<ShaderFloatMode> floatMode;
+    std::span<const std::uint32_t> linkedCallFallbacks;
 };
 
 struct MeshTargetLimits {
@@ -292,6 +313,10 @@ struct TessellationConfiguration {
     std::uint32_t partitioning;
     std::uint32_t outputTopology;
     std::uint32_t patchesPerGroup = 256;
+    std::uint32_t primitiveGroupSize = 0;
+    bool breakAtInstance = false;
+    std::uint32_t instancePatches = 0;
+    bool drawParameters = false;
 };
 
 inline constexpr std::uint32_t MeshDrawPushOffsetBytes = 104;
@@ -332,6 +357,11 @@ struct RecompileRequest {
     bool useCache = true;
 };
 
+inline std::uint32_t TessellationInstancePatches(const RecompileRequest& request) {
+    if (!request.graphics || !request.graphics->tessellation || request.graphics->draw.instanceCount <= 1u || request.graphics->tessellation->breakAtInstance) return 0u;
+    return request.graphics->draw.indexCount / request.graphics->tessellation->inputControlPoints;
+}
+
 enum class DescriptorKind {
     UniformBuffer,
     StorageBuffer,
@@ -348,7 +378,8 @@ enum class DescriptorImageShape {
     Image2DArray,
     ImageCube,
     Image3D,
-    Image1DArray
+    Image1DArray,
+    Image2DMultisample
 };
 
 enum class DescriptorRole {
@@ -359,7 +390,10 @@ enum class DescriptorRole {
     BdaPagetable,
     FaultBuffer,
     FlattenedSrt,
-    ShaderData
+    ShaderData,
+    ImageTable,
+    SamplerTable,
+    ImageTableMap
 };
 
 // A binding's per-element access flags, the same for every result materialized from a variant: copies
@@ -423,6 +457,7 @@ struct DescriptorBinding {
     SharedVector<bool> imageDepthCompare;
     SharedVector<bool> imageAtomic;
     SharedVector<bool> imageAtomic64;
+    std::vector<DescriptorImageShape> imageShapes;
     // Guest buffer elements the shader updates atomically (one entry per element of a GuestBuffers
     // binding, empty otherwise). An atomic on a host-imported range is a serialized PCIe round trip
     // (~0.4-0.5 us each on NVIDIA), so a driver may keep these elements in device-local memory.
@@ -439,6 +474,13 @@ struct DescriptorBinding {
     SharedVector<bool> imageUnnormalizedBaseLevel;
     SharedVector<std::uint32_t> imageSamplers;
     SharedVector<bool> bufferRead;
+};
+
+struct ImageTableEntryPoison {
+    std::array<std::uint32_t, 8> words{};
+    std::uint32_t dwordCount = 0;
+    std::uint32_t resource = 0;
+    std::uint32_t reason = 0;
 };
 
 struct VertexAttribute {
@@ -483,39 +525,43 @@ class SharedSpirv {
 public:
     SharedSpirv() = default;
     SharedSpirv(std::vector<std::uint32_t> words) : words(std::make_shared<std::vector<std::uint32_t>>(std::move(words))) {}
+    SharedSpirv(std::shared_ptr<const void> owner, std::span<const std::uint32_t> view) : owner(std::move(owner)), view(view) {}
     SharedSpirv& operator=(std::vector<std::uint32_t> other) {
         words = std::make_shared<std::vector<std::uint32_t>>(std::move(other));
+        owner.reset();
+        view = {};
         return *this;
     }
 
-    [[nodiscard]] const std::vector<std::uint32_t>& Words() const { return words ? *words : Empty(); }
-    operator const std::vector<std::uint32_t>&() const { return Words(); }
+    [[nodiscard]] std::span<const std::uint32_t> Words() const { return words ? std::span<const std::uint32_t>(*words) : view; }
+    [[nodiscard]] std::vector<std::uint32_t> Copy() const { return {Words().begin(), Words().end()}; }
     [[nodiscard]] std::size_t size() const { return Words().size(); }
     [[nodiscard]] bool empty() const { return Words().empty(); }
     [[nodiscard]] const std::uint32_t* data() const { return Words().data(); }
     [[nodiscard]] std::uint32_t* data() { return Mutable().data(); }
     [[nodiscard]] const std::uint32_t& operator[](std::size_t index) const { return Words()[index]; }
     [[nodiscard]] std::uint32_t& operator[](std::size_t index) { return Mutable()[index]; }
-    [[nodiscard]] std::vector<std::uint32_t>::const_iterator begin() const { return Words().begin(); }
-    [[nodiscard]] std::vector<std::uint32_t>::const_iterator end() const { return Words().end(); }
+    [[nodiscard]] std::span<const std::uint32_t>::iterator begin() const { return Words().begin(); }
+    [[nodiscard]] std::span<const std::uint32_t>::iterator end() const { return Words().end(); }
     [[nodiscard]] std::vector<std::uint32_t>::iterator begin() { return Mutable().begin(); }
     [[nodiscard]] std::vector<std::uint32_t>::iterator end() { return Mutable().end(); }
     void resize(std::size_t count) { Mutable().resize(count); }
     std::vector<std::uint32_t>::iterator insert(std::vector<std::uint32_t>::const_iterator where, std::initializer_list<std::uint32_t> values) { return Mutable().insert(where, values); }
-    friend bool operator==(const SharedSpirv& left, const SharedSpirv& right) { return left.words == right.words || left.Words() == right.Words(); }
+    friend bool operator==(const SharedSpirv& left, const SharedSpirv& right) { return std::ranges::equal(left.Words(), right.Words()); }
 
 private:
-    static const std::vector<std::uint32_t>& Empty() {
-        static const std::vector<std::uint32_t> empty;
-        return empty;
-    }
-    // Copy on write: a holder whose words are shared gets its own copy before the first write.
     std::vector<std::uint32_t>& Mutable() {
-        if (words == nullptr || words.use_count() != 1) words = std::make_shared<std::vector<std::uint32_t>>(Words());
+        if (words == nullptr || words.use_count() != 1) {
+            words = std::make_shared<std::vector<std::uint32_t>>(Copy());
+            owner.reset();
+            view = {};
+        }
         return *words;
     }
 
     std::shared_ptr<std::vector<std::uint32_t>> words;
+    std::shared_ptr<const void> owner;
+    std::span<const std::uint32_t> view;
 };
 
 struct VertexInput {
@@ -557,6 +603,9 @@ struct CompiledShaderArtifact {
     std::vector<std::uint32_t> parameterExports;
     std::vector<FragmentParameter> fragmentParameters;
     BarycentricEmulation barycentricEmulation;
+    std::vector<std::uint32_t> stencilReferences;
+    bool stencilReplaySafe = false;
+    std::uint32_t stencilReferenceDword = 0xffffffffu;
     std::uint64_t variantId = 0;
 };
 
@@ -567,12 +616,16 @@ struct ShaderInvocation {
     std::vector<std::byte> pushConstants;
     std::vector<VertexAttribute> vertexAttributes;
     std::uint32_t poisonedSrtReads = 0;
+    std::vector<ImageTableEntryPoison> imageTablePoison;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> imageTableRanges;
+    std::vector<std::vector<std::pair<std::uint64_t, std::uint64_t>>> imageTableReadRanges;
+    std::uint64_t imageTableShader = 0;
+    std::uint32_t imageTableFaults = 0;
 };
 
 struct RecompileResult : CompiledShaderArtifact, ShaderInvocation {
     bool cacheHit = false;
     std::uint32_t workgroupMemoryDwords = 0;
-    std::vector<std::uint32_t> shaderDataUserWords;
     [[nodiscard]] std::uint64_t PipelineVariantId() const { return specializationId != 0 ? specializationId : variantId; }
 };
 

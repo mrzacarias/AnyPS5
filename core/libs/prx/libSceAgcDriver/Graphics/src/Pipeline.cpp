@@ -5,7 +5,6 @@
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/PipelineSpecialization.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/VertexInput.hpp"
-#include <cstring>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -128,6 +127,7 @@ VkViewport HostViewport(const Context& context, const State& state) {
 bool ValidateSampleLocations(const Context& context, const State& state) {
     const bool extensionSupportsSamples = (context.sampleLocationSampleCounts & state.samples) != 0;
     Require(!state.customSampleLocations || extensionSupportsSamples, "custom sample locations require VK_EXT_sample_locations support for the draw's sample count");
+    Require(!state.sampleLocationGrid || (context.sampleLocationGridSampleCounts & state.samples) != 0, "sample locations varying between pixels require a 2x2 sample location grid for the draw's sample count");
     const bool enabled = extensionSupportsSamples && (!state.depth || SampleLocationsCompatibleDepth(context, HostDepthFormat(context, state.depth->format), state.depth->samples));
     Require(!state.customSampleLocations || enabled, "custom sample locations require a compatible depth format and sample count");
     return enabled;
@@ -167,6 +167,20 @@ bool ShadersWriteMemory(std::span<const CompiledShader> shaders) {
         }
     }
     return false;
+}
+
+void ValidateSampleMask(const Context& context, const State& state, std::span<const CompiledShader> shaders) {
+    if (!PartialSampleMask(state)) return;
+    for (const auto& shader : shaders) {
+        if (shader.stage != ShaderRecompiler::ShaderStage::Fragment) continue;
+        Require(shader.program != nullptr, "missing compiled fragment shader");
+        if (UniformSampleMask(state)) {
+            Require(context.earlyFragmentSampleMaskTestBeforeSampleCounting || !DeclaresEarlyFragmentTests(*shader.program), "a sample mask with early fragment tests needs VkPhysicalDeviceMaintenance5Properties::earlyFragmentSampleMaskTestBeforeSampleCounting, which the device lacks");
+            continue;
+        }
+        const bool tested = state.depth.has_value() && (state.depthTest || state.stencilTest || state.depthBoundsTest);
+        Require(!state.pixelEarlyZ || !tested || !ShadersWriteMemory(std::span(&shader, 1)), "a sample mask that differs between the pixels of a quad, from a pixel program with early depth or stencil tests that writes memory, is unsupported: the masked pixels are removed in the shader, after the tests");
+    }
 }
 
 namespace {
@@ -226,15 +240,22 @@ bool libraryKeys(PipelineLibraryKeys& keys, const Context& context, const State&
     if (state.stages.tessellation) appendKey(keys.preRasterization, state.stages.tessellation->inputControlPoints);
     appendKey(keys.fragmentShader, state.samples);
     appendKey(keys.fragmentOutput, state.samples);
+    appendKey(keys.fragmentShader, state.perSampleShading);
+    appendKey(keys.fragmentOutput, state.perSampleShading);
     const auto sampleLocationsEnabled = ValidateSampleLocations(context, state);
     appendKey(keys.fragmentShader, sampleLocationsEnabled);
     appendKey(keys.fragmentOutput, sampleLocationsEnabled);
     appendKey(keys.fragmentShader, state.customSampleLocations);
     appendKey(keys.fragmentOutput, state.customSampleLocations);
     if (state.customSampleLocations) {
-        for (std::uint32_t sample = 0; sample < state.samples; ++sample) {
-            appendKey(keys.fragmentShader, state.sampleLocations[sample]);
-            appendKey(keys.fragmentOutput, state.sampleLocations[sample]);
+        appendKey(keys.fragmentShader, state.sampleLocationGrid);
+        appendKey(keys.fragmentOutput, state.sampleLocationGrid);
+        const auto grid = SampleLocationGrid(state);
+        for (std::uint32_t pixel = 0; pixel < grid.width * grid.height; ++pixel) {
+            for (std::uint32_t sample = 0; sample < state.samples; ++sample) {
+                appendKey(keys.fragmentShader, state.sampleLocations[pixel * 8u + sample]);
+                appendKey(keys.fragmentOutput, state.sampleLocations[pixel * 8u + sample]);
+            }
         }
     }
     for (const auto& blend : state.blends) appendKey(keys.fragmentOutput, blend);
@@ -246,6 +267,8 @@ bool libraryKeys(PipelineLibraryKeys& keys, const Context& context, const State&
     }
     appendKey(keys.renderPass, state.depth.has_value());
     if (state.depth) appendKey(keys.renderPass, state.depth->format);
+    appendKey(keys.fragmentShader, HostSampleMask(state));
+    appendKey(keys.fragmentOutput, HostSampleMask(state));
     if (!resources.split) {
         appendKey(keys.layout, pushStagesOf(context));
         for (const auto word : resources.mainKey) appendKey(keys.layout, word);
@@ -288,7 +311,9 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
     Require(!depthBounds || context.depthBounds, "device does not support the depth bounds test");
     Require(!depthBias || state.depthBiasClamp == 0.0f || context.depthBiasClamp, "device does not support depth bias clamping");
     Require(!state.dualSourceBlend || (context.dualSrcBlend && state.blends.size() <= context.limits.maxFragmentDualSrcAttachments), "device does not support dual-source blending into this many attachments");
+    Require(state.reversedBlend == 0 || (context.dualSrcBlend && state.blends.size() <= context.limits.maxFragmentDualSrcAttachments), "blending into a color target with a reversed component order through a second source color needs dual-source blending, which the device does not support");
     Require(!state.negativeOneToOne || context.depthClipControl, "negative-one-to-one depth clipping requires VK_EXT_depth_clip_control with depthClipControl enabled");
+    Require(!state.perSampleShading || context.sampleRateShading, "per-sample pixel shading requires the sampleRateShading device feature");
     Require(state.conservativeRasterization == VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT || context.conservativeRasterization, "conservative rasterization requires VK_EXT_conservative_rasterization with at most 1/256 pixel of overestimation and degenerate triangles rasterized");
     ValidateProvokingVertex(context, state, shaders);
     if (state.rectList) Require(context.tessellationShader && context.limits.maxTessellationPatchSize >= 4, "rect-list requires tessellation with four output control points");
@@ -328,6 +353,12 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
             if (shaders[i].stage == ShaderRecompiler::ShaderStage::Mesh && context.meshWave32 && shader.hostSubgroupSize == 32u) stages[i].pNext = &meshSubgroup;
             specializations.emplace_back(shader);
             stages[i].pSpecializationInfo = specializations.back().Info();
+        }
+        if (std::ranges::any_of(shaders, [](const CompiledShader& shader) { return shader.program != nullptr && !shader.program->stencilReferences.empty(); })) {
+            for (std::size_t i = 0; i < shaders.size(); ++i) {
+                if (shaders[i].stage != ShaderRecompiler::ShaderStage::Vertex) continue;
+                Require(stages[i].flags == 0u && stages[i].pNext == nullptr, "stencil replay vertex stage allows varying subgroup size");
+            }
         }
         // A descriptor set layout with the same bindings as this one is compatible with the pipeline
         // layout, so later draws bind their own ShaderResources' set under it.
@@ -415,6 +446,7 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         PipelineLibraryKeys keys;
         libraries = libraryKeys(keys, context, state, vertexInput, resources, shaders);
         std::vector<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+        if (state.stencilReplayReference) dynamicStates.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
         if (depthBounds) dynamicStates.push_back(VK_DYNAMIC_STATE_DEPTH_BOUNDS);
         if (depthBias) dynamicStates.push_back(VK_DYNAMIC_STATE_DEPTH_BIAS);
         if (libraries) dynamicStates.assign(PipelineLibraryDynamicStates().begin(), PipelineLibraryDynamicStates().end());
@@ -440,10 +472,13 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         }
         VkPipelineMultisampleStateCreateInfo samples{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
         samples.rasterizationSamples = static_cast<VkSampleCountFlagBits>(state.samples);
+        samples.sampleShadingEnable = state.perSampleShading ? VK_TRUE : VK_FALSE;
+        samples.minSampleShading = state.perSampleShading ? 1.0f : 0.0f;
         const auto locations = SampleLocations(state);
         VkPipelineSampleLocationsStateCreateInfoEXT sampleLocations{VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT};
         sampleLocations.sampleLocationsEnable = VK_TRUE;
-        sampleLocations.sampleLocationsInfo = {VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, samples.rasterizationSamples, {1, 1}, state.samples, locations.data()};
+        const auto grid = SampleLocationGrid(state);
+        sampleLocations.sampleLocationsInfo = {VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, samples.rasterizationSamples, grid, state.samples * grid.width * grid.height, locations.data()};
         if (sampleLocationsEnabled) samples.pNext = &sampleLocations;
         VkPipelineDepthStencilStateCreateInfo depthStencil{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
         depthStencil.depthTestEnable = state.depthTest;
@@ -453,6 +488,8 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
         depthStencil.stencilTestEnable = state.stencilTest;
         depthStencil.front = state.stencilFront;
         depthStencil.back = state.stencilBack;
+        const VkSampleMask sampleMask = HostSampleMask(state);
+        if (PartialSampleMask(state) && UniformSampleMask(state)) samples.pSampleMask = &sampleMask;
         VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
         const bool alternateAlpha = SplitsAlternateAlpha(state);
         std::vector<VkPipelineColorBlendAttachmentState> firstChannels(state.blends.begin(), state.blends.end());
@@ -511,13 +548,18 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
             return;
         }
         if (libraries) pipeline = LinkPipelineFromLibraries(context, pipelineInfo, rendering, layoutInfo, keys, &optimized, false, _modules);
-        else Check(context.Function<PFN_vkCreateGraphicsPipelines>("vkCreateGraphicsPipelines")(context.device, context.pipelineCache, 1, &pipelineInfo, nullptr, &pipeline), "vkCreateGraphicsPipelines");
+        else {
+            auto pipelineCacheLock = context.LockPipelineCacheForUse();
+            Check(context.Function<PFN_vkCreateGraphicsPipelines>("vkCreateGraphicsPipelines")(context.device, context.pipelineCache, 1, &pipelineInfo, nullptr, &pipeline), "vkCreateGraphicsPipelines");
+        }
         if (alternateAlpha) {
             blend.pAttachments = secondChannels.data();
+            auto pipelineCacheLock = context.LockPipelineCacheForUse();
             Check(context.Function<PFN_vkCreateGraphicsPipelines>("vkCreateGraphicsPipelines")(context.device, context.pipelineCache, 1, &pipelineInfo, nullptr, &secondChannel), "vkCreateGraphicsPipelines");
         }
         if (state.depthBiasPerFace) {
             raster.cullMode = VK_CULL_MODE_FRONT_BIT;
+            auto pipelineCacheLock = context.LockPipelineCacheForUse();
             Check(context.Function<PFN_vkCreateGraphicsPipelines>("vkCreateGraphicsPipelines")(context.device, context.pipelineCache, 1, &pipelineInfo, nullptr, &backFaces), "vkCreateGraphicsPipelines");
         }
         for (const auto module : _modules) context.Function<PFN_vkDestroyShaderModule>("vkDestroyShaderModule")(context.device, module, nullptr);
@@ -531,6 +573,7 @@ Pipeline::Pipeline(const Context& context, const State& state, const VertexInput
 }
 
 bool Pipeline::Prebuild(const Context& context, const State& state, const VertexInputLayout& vertexInput, const PipelineSetLayouts& resources, std::span<const CompiledShader> shaders) {
+    if (std::ranges::any_of(shaders, [](const CompiledShader& shader) { return !shader.program->stencilReferences.empty(); })) return false;
     struct Scope {
         Scope() { prebuilding = true; prebuilt = false; }
         ~Scope() { prebuilding = false; }
@@ -664,7 +707,8 @@ void Pipeline::Begin(VkCommandBuffer commands, const Framebuffer& framebuffer, V
     begin.framebuffer = framebuffer.Handle();
     begin.renderArea = {{0, 0}, extent};
     const auto locations = SampleLocations(state);
-    const VkSampleLocationsInfoEXT info{VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, static_cast<VkSampleCountFlagBits>(state.samples), {1, 1}, state.samples, locations.data()};
+    const auto grid = SampleLocationGrid(state);
+    const VkSampleLocationsInfoEXT info{VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT, nullptr, static_cast<VkSampleCountFlagBits>(state.samples), grid, state.samples * grid.width * grid.height, locations.data()};
     const VkAttachmentSampleLocationsEXT initial{static_cast<std::uint32_t>(state.colors.size()), info};
     const VkSubpassSampleLocationsEXT post{0, info};
     VkRenderPassSampleLocationsBeginInfoEXT sampleLocations{VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT};
@@ -683,6 +727,7 @@ void Pipeline::Continue(VkCommandBuffer commands, const State& state) const {
     const auto viewport = HostViewport(context, state);
     context.Resolved(&DeviceFunctions::cmdSetViewport, "vkCmdSetViewport")(commands, 0, 1, &viewport);
     context.Resolved(&DeviceFunctions::cmdSetScissor, "vkCmdSetScissor")(commands, 0, 1, &state.scissor);
+    if (state.stencilReplayReference) context.Resolved(&DeviceFunctions::cmdSetStencilReference, "vkCmdSetStencilReference")(commands, VK_STENCIL_FACE_FRONT_AND_BACK, *state.stencilReplayReference);
     if (libraries) {
         setLibraryState(commands, state);
         return;
@@ -801,8 +846,12 @@ void pipelineKey(std::vector<std::byte>& key, const Context& context, const Stat
     for (const auto& blend : state.blends) append(key, blend);
     for (const auto value : state.blendConstants) append(key, value);
     append(key, state.samples);
+    append(key, state.perSampleShading);
     append(key, state.customSampleLocations);
-    if (state.customSampleLocations) append(key, state.sampleLocations);
+    if (state.customSampleLocations) {
+        append(key, state.sampleLocationGrid);
+        append(key, state.sampleLocations);
+    }
     append(key, state.colors.size());
     for (const auto& color : state.colors) append(key, color.format);
     if (state.blends.size() != state.colors.size()) {
@@ -818,8 +867,12 @@ void pipelineKey(std::vector<std::byte>& key, const Context& context, const Stat
         append(key, state.depthBias);
         append(key, state.depthBiasPerFace);
         append(key, state.stencilTest);
-        append(key, state.stencilFront);
-        append(key, state.stencilBack);
+        auto front = state.stencilFront;
+        auto back = state.stencilBack;
+        if (state.stencilReplayReference) front.reference = back.reference = 0u;
+        append(key, state.stencilReplayReference.has_value());
+        append(key, front);
+        append(key, back);
     }
     append(key, state.stages.mesh.has_value());
     if (state.stages.mesh) {
@@ -842,7 +895,10 @@ void pipelineKey(std::vector<std::byte>& key, const Context& context, const Stat
         append(key, tessellation.partitioning);
         append(key, tessellation.outputTopology);
         append(key, tessellation.patchesPerGroup);
+        append(key, tessellation.primitiveGroupSize);
+        append(key, tessellation.breakAtInstance);
     }
+    append(key, HostSampleMask(state));
 }
 
 std::uint64_t hashKey(const std::vector<std::byte>& key) {
@@ -868,27 +924,8 @@ struct PipelineStore {
     std::uint64_t misses = 0;
     std::uint64_t uncached = 0;
     std::uint64_t evicted = 0;
-    std::uint64_t generation = 1;
-    std::uint64_t identityHits = 0;
     std::chrono::steady_clock::time_point lastReport = std::chrono::steady_clock::now();
 };
-
-bool pipelineIdentity() {
-    static const bool enabled = [] { const char* text = std::getenv("APS5_PIPELINE_IDENTITY"); return text == nullptr || std::strcmp(text, "0") != 0; }();
-    return enabled;
-}
-
-struct LastPipeline {
-    std::vector<std::byte> key;
-    std::vector<std::byte> scratch;
-    std::list<PipelineStore::Entry>::iterator entry;
-    std::uint64_t generation = 0;
-};
-
-LastPipeline& ThreadLastPipeline() {
-    thread_local LastPipeline last;
-    return last;
-}
 
 // Never destroyed: the pipelines belong to a device that may already be gone when statics die, and
 // the device's teardown (ClearCachedPipelines) is the place to destroy them.
@@ -908,7 +945,6 @@ bool alive(const PipelineStore::Entry& entry, const Context& context) {
 // not destroyed.
 std::list<PipelineStore::Entry>::iterator abandon(PipelineStore& store, std::list<PipelineStore::Entry>::iterator it) {
     it->pipeline->Abandon();
-    ++store.generation;
     store.index.erase(it->hash);
     return store.entries.erase(it);
 }
@@ -920,8 +956,8 @@ void reportPipelines(PipelineStore& store) {
     if (now - store.lastReport < std::chrono::seconds(10)) return;
     store.lastReport = now;
     const auto lookups = store.hits + store.misses + store.uncached;
-    AgcDriver::ProfilePrint_nid_no_patch( "[pipecache] %llu lookups over 10 s: %llu hits (%.0f%%; %llu repeats of the thread's previous key), %llu misses, %llu private (no variant id), %llu evicted, %zu cached\n", static_cast<unsigned long long>(lookups), static_cast<unsigned long long>(store.hits), lookups != 0 ? 100.0 * static_cast<double>(store.hits) / static_cast<double>(lookups) : 0.0, static_cast<unsigned long long>(store.identityHits), static_cast<unsigned long long>(store.misses), static_cast<unsigned long long>(store.uncached), static_cast<unsigned long long>(store.evicted), store.entries.size());
-    store.hits = store.misses = store.uncached = store.evicted = store.identityHits = 0;
+    AgcDriver::ProfilePrint_nid_no_patch( "[pipecache] %llu lookups over 10 s: %llu hits (%.0f%%), %llu misses, %llu private (no variant id), %llu evicted, %zu cached\n", static_cast<unsigned long long>(lookups), static_cast<unsigned long long>(store.hits), lookups != 0 ? 100.0 * static_cast<double>(store.hits) / static_cast<double>(lookups) : 0.0, static_cast<unsigned long long>(store.misses), static_cast<unsigned long long>(store.uncached), static_cast<unsigned long long>(store.evicted), store.entries.size());
+    store.hits = store.misses = store.uncached = store.evicted = 0;
 }
 
 }
@@ -936,27 +972,8 @@ std::shared_ptr<Pipeline> CachedPipeline(const Context& context, const State& st
     auto& store = Pipelines();
     std::lock_guard lock(store.mutex);
     reportPipelines(store);
-    const bool identity = pipelineIdentity();
-    auto* last = identity ? &ThreadLastPipeline() : nullptr;
-    if (identity) {
-        pipelineKey(last->scratch, context, state, vertexInput, resources, shaders, attachmentLayout);
-        if (!last->scratch.empty() && last->generation == store.generation && last->scratch == last->key && alive(*last->entry, context)) {
-            ++store.hits;
-            ++store.identityHits;
-            store.entries.splice(store.entries.end(), store.entries, last->entry);
-            return last->entry->pipeline;
-        }
-        last->generation = 0;
-    } else {
-        pipelineKey(store.scratchKey, context, state, vertexInput, resources, shaders, attachmentLayout);
-    }
-    const auto& key = identity ? last->scratch : store.scratchKey;
-    const auto remember = [&](std::list<PipelineStore::Entry>::iterator entry) {
-        if (!identity) return;
-        last->key = key;
-        last->entry = entry;
-        last->generation = store.generation;
-    };
+    auto& key = store.scratchKey;
+    pipelineKey(key, context, state, vertexInput, resources, shaders, attachmentLayout);
     if (key.empty()) {
         ++store.uncached;
         return std::make_shared<Pipeline>(context, state, vertexInput, resources, shaders, attachmentLayout);
@@ -970,7 +987,6 @@ std::shared_ptr<Pipeline> CachedPipeline(const Context& context, const State& st
             if (alive(*it, context)) {
                 ++store.hits;
                 store.entries.splice(store.entries.end(), store.entries, it);
-                remember(it);
                 return it->pipeline;
             }
             abandon(store, it);
@@ -996,10 +1012,8 @@ std::shared_ptr<Pipeline> CachedPipeline(const Context& context, const State& st
         if (victim == store.entries.end()) break;
         store.index.erase(victim->hash);
         store.entries.erase(victim);
-        ++store.generation;
         ++store.evicted;
     }
-    if (const auto found = store.index.find(hash); found != store.index.end() && found->second->pipeline == pipeline) remember(found->second);
     return pipeline;
 }
 
@@ -1013,7 +1027,6 @@ void ClearCachedPipelines(VkDevice device) {
         }
         store.index.erase(it->hash);
         it = store.entries.erase(it);
-        ++store.generation;
     }
     ClearPipelineLibraries(device);
 }

@@ -1,10 +1,10 @@
 #include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawCache.hpp"
 #include <algorithm>
+#include <bit>
 #include "prx/libSceAgcDriver/Execution/include/Driver/Synchronization/DeferredLabels.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Memory/WriteEvidence.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
-#include <bit>
 #include <cstdlib>
 #include <utility>
 
@@ -29,6 +29,11 @@ bool Driver::drawEntries() {
 
 bool Driver::drawDataHits() {
     static const bool hits = std::getenv("APS5_NO_DRAW_DATA_HITS") == nullptr;
+    return hits;
+}
+
+bool Driver::drawStageDataHits() {
+    static const bool hits = std::getenv("APS5_NO_DRAW_STAGE_DATA_HITS") == nullptr && !stampValidate();
     return hits;
 }
 
@@ -94,11 +99,14 @@ bool DrawKeySightings::SeenBefore(std::uint64_t key) {
     return false;
 }
 
-bool Driver::admitDrawKey(std::uint64_t key) {
+bool Driver::admitDrawKey(std::uint64_t key, std::uint64_t shape) {
     std::lock_guard cacheLock(drawCacheMutex);
     if (drawCache.contains(key)) return true;
     if (!drawKeySightings) drawKeySightings.emplace(drawCacheEntries() * DrawKeySightings::Ways);
-    return drawKeySightings->SeenBefore(key);
+    const bool seen = drawKeySightings->SeenBefore(key);
+    if (seen || shape == 0 || drawShapes.contains(shape)) return seen;
+    if (!drawShapeSightings) drawShapeSightings.emplace(drawCacheEntries() * DrawKeySightings::Ways);
+    return drawShapeSightings->SeenBefore(shape);
 }
 
 void Driver::insertDrawEntry(std::uint64_t key, std::vector<std::shared_ptr<DispatchVariant>>& fresh, std::shared_ptr<const DrawDecode> decode, std::uint64_t shape) {
@@ -175,7 +183,9 @@ void Driver::eraseDrawEntry(std::uint64_t key, const std::shared_ptr<DrawEntry>&
 
 bool DecodeProgramsCurrent(const DrawDecode& decode, const ShaderRegistry&) {
     return std::all_of(decode.programs.begin(), decode.programs.end(), [&](const DrawProgram& program) {
-        return !program.snapshot->header.empty() || ReadRawShader(program.snapshot->codeAddress + program.codeOffset * sizeof(std::uint32_t)) == program.snapshot;
+        if (!program.snapshot->header.empty()) return true;
+        return ReadRawShader(program.snapshot->codeAddress + program.codeOffset * sizeof(std::uint32_t)) == program.snapshot &&
+            (program.tailContinuation == nullptr || ReadRawShader(program.tailContinuation->codeAddress) == program.tailContinuation);
     });
 }
 
