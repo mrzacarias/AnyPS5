@@ -108,7 +108,6 @@ def check_output(data, system, rela, plt, initial):
 
 
 def invalid_cases(sce):
-    yield "relative-symbol", module([NOOP, (TARGET, (1 << 32) | 8, FUNCTION)], sce=sce), "RELATIVE relocation has a symbol"
     yield "invalid-symbol", module([NOOP, (TARGET, (99 << 32) | 6, 0)], sce=sce), "Unsupported relocation or symbol index"
     yield "invalid-target", module([NOOP, (0xffffffffffffffff, 8, FUNCTION)], sce=sce), "Unmapped or inaccessible guest address"
     yield "overlapping-real", module([NOOP, RELATIVE, RELATIVE], sce=sce), "Overlapping guest relocations"

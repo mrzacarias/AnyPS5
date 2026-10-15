@@ -54,20 +54,20 @@ def main():
             return result, case / "app0" / "sce_module" / "module.prx.guest.prx", output
 
         for sce in (False, True):
-            for index, lifecycle in ((1, False), (3, False), (1, True)):
-                image = fixture(sce, index, lifecycle)
+            # The symbol a RELATIVE relocation names does not change it: a global function (old SDK libc.prx) leaves
+            # base + addend too.
+            for index, lifecycle, info, value in ((1, False, 3, 0), (3, False, 3, 0), (1, True, 3, 0)) + (((1, False, 0x12, 16),) if sce else ()):
+                image = fixture(sce, index, lifecycle, info, value)
                 for system in ("linux", "windows", "macos"):
-                    result, artifact, output = convert(f"{sce}-{index}-{lifecycle}", system, image)
-                    assert result.returncode == 0, (sce, index, lifecycle, system, result.stdout, result.stderr)
+                    result, artifact, output = convert(f"{sce}-{index}-{lifecycle}-{info}-{value}", system, image)
+                    assert result.returncode == 0, (sce, index, lifecycle, info, value, system, result.stdout, result.stderr)
                     check_output(artifact.read_bytes(), system, [(TARGET, 8, FUNCTION), (TARGET + 8, 8, FUNCTION)], [], UNCHANGED)
                     native = (system == "linux" and sys.platform == "linux") or (system == "windows" and os.name == "nt")
                     if native and platform.machine().lower() in ("x86_64", "amd64") and not lifecycle:
                         executed = subprocess.run([sys.executable, __file__, "--load", str(artifact)],
                                                   capture_output=True, text=True, timeout=10)
                         assert executed.returncode == 0, (executed.returncode, executed.stdout, executed.stderr)
-            for name, info, value, error in (("valued-section", 3, 16, "RELATIVE relocation has a symbol"),
-                                             ("notype", 0, 0, "RELATIVE relocation has a symbol"),
-                                             ("global-section", 0x13, 0, "Unsupported symbol attributes")):
+            for name, info, value, error in (("global-section", 0x13, 0, "Unsupported symbol attributes"),):
                 result, artifact, output = convert(f"{sce}-{name}", "linux", fixture(sce, info=info, value=value))
                 assert result.returncode == 2 and error in result.stderr, (name, result.stderr)
                 assert not artifact.exists() and not output.exists(), name

@@ -305,10 +305,7 @@ GuestImage GuestImageReader::Read(const std::filesystem::path& path, std::vector
             if ((next != relocationTargets.end() && next->first < target + 8) || (next != relocationTargets.begin() && std::prev(next)->second > target)) fail("Overlapping guest relocations");
             relocationTargets.emplace(target, target + 8);
             if (relocation == 8) {
-                if ((info >> 32) != 0) {
-                    const auto& symbol = image.Symbols[info >> 32];
-                    if (symbol.Info != 3 || symbol.Value != 0) fail("RELATIVE relocation has a symbol");
-                }
+                // A RELATIVE relocation is base + addend whatever symbol it names; old SDK libc.prx names one.
                 mapped(addend, 0, 0);
             } else if (relocation == 1 || relocation == 6 || relocation == 7) {
                 const auto& symbol = image.Symbols[info >> 32];
