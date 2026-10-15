@@ -11,6 +11,39 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from check_conventions import STUB_BODY, SYSTEM_DEPENDENCY, Check, function_body, links, output
 
+CONVENTIONS_TEST_SHARDS = 6
+
+
+def iter_test_cases(suite):
+    for test in suite:
+        if isinstance(test, unittest.TestSuite):
+            yield from iter_test_cases(test)
+        else:
+            yield test
+
+
+def discovered_test_cases():
+    suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    return sorted(iter_test_cases(suite), key=lambda test: test.id())
+
+
+def conventions_test_shard(shard, shard_count=CONVENTIONS_TEST_SHARDS):
+    if shard_count <= 0 or shard < 0 or shard >= shard_count:
+        raise ValueError("shard index must be within the shard count")
+    tests = discovered_test_cases()
+    return unittest.TestSuite(test for index, test in enumerate(tests) if index % shard_count == shard)
+
+
+class TestShardTests(unittest.TestCase):
+    def test_shards_discover_each_case_once(self):
+        discovered = [test.id() for test in discovered_test_cases()]
+        sharded = [test.id() for shard in range(CONVENTIONS_TEST_SHARDS)
+                   for test in iter_test_cases(conventions_test_shard(shard))]
+        self.assertEqual(sorted(sharded), sorted(discovered))
+        self.assertEqual(len(sharded), len(set(sharded)))
+        self.assertTrue(all(len(list(iter_test_cases(conventions_test_shard(shard)))) > 0
+                            for shard in range(CONVENTIONS_TEST_SHARDS)))
+
 
 class FunctionBodyTests(unittest.TestCase):
     def test_line_comments_preserve_following_statements(self):
@@ -381,6 +414,16 @@ class PullRequestTemplateTests(unittest.TestCase):
     def test_checked_item_is_accepted(self):
         self.assertEqual(self.findings("- [x] all"), [])
 
+    def test_depends_on_answered_as_a_list_is_accepted(self):
+        for answer in ("\n  - #3\n  - #4", "\r\n  - #3\r\n  - #4", "\n- #3", "\n  * none"):
+            with self.subTest(answer=answer):
+                body = f"### What\nx\n### Tested\nLinux\n### Checklist\n- [x] Depends on:{answer}\n- [x] AI-assisted: no\n"
+                self.assertEqual(self.body_findings(body), [])
+
+    def test_depends_on_left_empty_before_the_next_item_is_reported(self):
+        body = "### What\nx\n### Tested\nLinux\n### Checklist\n- [x] Depends on:\n- [x] AI-assisted: no\n"
+        self.assertEqual(self.body_findings(body), [("pr-template", "", 0, "fill Depends on with #N or none")])
+
     def test_subsections_stay_inside_their_section(self):
         body = "### What\nx\n### Tested\n#### Linux\nctest\n#### Windows\nctest\n### Checklist\n- [x] Depends on: none\n- [x] AI-assisted: no\n"
         self.assertEqual(self.body_findings(body), [])
@@ -685,4 +728,16 @@ class RepositoryChecksTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--shard":
+        if len(sys.argv) != 3 or "/" not in sys.argv[2]:
+            print("usage: test_check_conventions_comments.py --shard INDEX/COUNT", file=sys.stderr)
+            raise SystemExit(2)
+        try:
+            shard_index, shard_count = (int(part) for part in sys.argv[2].split("/", 1))
+            suite = conventions_test_shard(shard_index, shard_count)
+        except ValueError as error:
+            print(f"invalid shard: {error}", file=sys.stderr)
+            raise SystemExit(2)
+        result = unittest.TextTestRunner().run(suite)
+        raise SystemExit(0 if result.wasSuccessful() else 1)
     unittest.main()
