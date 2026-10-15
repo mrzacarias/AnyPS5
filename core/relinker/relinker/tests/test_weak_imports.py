@@ -1,5 +1,5 @@
-"""Check that weak undefined imports stay weak on Linux and bind to null on Windows when no module exports them, and
-that a guest module keeps weak only the imports that name no library."""
+"""Check that weak undefined imports stay weak on Linux and macOS and bind to null on Windows when no module exports them,
+and that a guest module keeps weak only the imports that name no library."""
 
 import os
 import struct
@@ -11,7 +11,10 @@ from pathlib import Path
 from test_guest_export_lookup import guest_symbols
 from test_guest_intel_trampolines import main_fixture
 from test_guest_symbol_names import dynamic_tags, file_offset, symbol_name
+from test_macos_output import MachO
 from test_windows_import_modules import executable, provider
+from import_fixture import fixture as macos_fixture
+from nid import nid
 
 SHT_DYNSYM = 11
 STB_GLOBAL = 1
@@ -46,6 +49,19 @@ def module_bindings(image):
     count, = struct.unpack_from('<I', image, file_offset(image, tags[4]) + 4)
     symbols = file_offset(image, tags[6])
     return {symbol_name(image, tags, index): image[symbols + index * 24 + 4] >> 4 for index in range(1, count)}
+
+
+def macho_bind_opcodes(data):
+    macho = MachO(data)
+    bind_offset, bind_size = macho.dyld_info[2], macho.dyld_info[3]
+    stream = data[bind_offset:bind_offset + bind_size]
+    opcodes = {}
+    for symbol in ('puts', 'exit'):
+        name = ('_' + nid(symbol)).encode() + b'\0'
+        at = stream.find(name)
+        assert at > 0, (symbol, stream)
+        opcodes[symbol] = stream[at - 1]
+    return opcodes
 
 
 def main():
@@ -88,6 +104,19 @@ def main():
             if os.name == 'nt':
                 run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
                 assert run.returncode == expected, (name, run.returncode, run.stdout, run.stderr)
+
+        weak_puts = macos_fixture()
+        weak_puts[0x5B00 + 24 + 4] = (STB_WEAK << 4) | 2
+        for name, image, expected in (('macos-weak', weak_puts, {'puts': 0x41, 'exit': 0x40}),
+                                      ('macos-global', macos_fixture(), {'puts': 0x40, 'exit': 0x40})):
+            source = work / (name + '.elf')
+            source.write_bytes(bytes(image))
+            output = work / name
+            result = subprocess.run([str(relinker), '--macos', '--skip-sce-module', str(source), str(output)],
+                                    capture_output=True, text=True, timeout=30)
+            assert result.returncode == 0, (name, result.stdout, result.stderr)
+            opcodes = macho_bind_opcodes(output.read_bytes())
+            assert opcodes == expected, (name, opcodes)
 
     print('Weak import tests passed')
 

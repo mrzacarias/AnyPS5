@@ -47,8 +47,8 @@ constexpr std::uintptr_t PageBytes = 4096;
 class Watch {
 public:
     static Watch& Get() {
-        static Watch watch;
-        return watch;
+        static auto* watch = new Watch;
+        return *watch;
     }
 
     bool Available() const {
@@ -323,8 +323,8 @@ std::atomic<void (*)(bool)> g_deferInterrupts{nullptr};
 class Watch {
 public:
     static Watch& Get() {
-        static Watch watch;
-        return watch;
+        static auto* watch = new Watch;
+        return *watch;
     }
 
     bool Available() const {

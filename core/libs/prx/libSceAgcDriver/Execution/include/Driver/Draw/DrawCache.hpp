@@ -1,7 +1,6 @@
 #ifndef CORE_LIBS_PRX_LIBSCEAGCDRIVER_EXECUTION_INCLUDE_DRIVER_DRAWCACHE_HPP
 #define CORE_LIBS_PRX_LIBSCEAGCDRIVER_EXECUTION_INCLUDE_DRIVER_DRAWCACHE_HPP
 
-#include "UserDataUse.hpp"
 #include "prx/libSceAgcDriver/Execution/include/Driver/Dispatch/DispatchCache.hpp"
 #include "prx/libSceAgcDriver/Execution/include/VulkanDevice.hpp"
 #include <array>
@@ -26,12 +25,12 @@ struct DrawProgram {
 
     std::shared_ptr<const ShaderSnapshot> snapshot;
     std::size_t codeOffset = 0;
+    std::shared_ptr<const ShaderSnapshot> tailContinuation;
     std::uint32_t resourceRegister = 0;
     bool nullPixel = false;
     bool merged = false;
     bool mergedPointerRequired = false;
     std::uint32_t mergedPointer = 0;
-    std::uint32_t hiddenUserWords = 0;
 };
 
 struct DrawDecode {
@@ -76,6 +75,11 @@ struct DrawEntry {
 
 using DrawDataCandidates = std::vector<std::vector<std::pair<std::shared_ptr<DispatchVariant>, std::vector<ShaderRecompiler::MemoryRegion>>>>;
 
+struct StageDataHit {
+    std::vector<std::uint32_t> words;
+    std::shared_ptr<const ShaderRecompiler::RecompileResult> compiled;
+};
+
 enum class DrawMiss : std::size_t { FrontDiffering, FragmentDiffering, OtherDiffering, Layout, Gate, Stages, Count };
 
 struct DrawEntryCounters {
@@ -87,8 +91,10 @@ struct DrawEntryCounters {
     std::uint64_t registerKeyLookups = 0, registerKeyHits = 0, decodeSkipped = 0, decodePartial = 0, facadeMismatches = 0, verifyDecodes = 0, verifyDecodeMismatches = 0;
     double keyUs = 0;
     std::uint64_t absentNewRegisters = 0, absentUserWords = 0, absentEvicted = 0, absentNeverInserted = 0, evictions = 0;
+    std::array<std::uint64_t, 6> registerKeyMissChanges{};
     std::uint64_t differingSameRuns = 0, differingWords = 0, differingRunsChanged = 0;
     std::uint64_t dataHits = 0, dataStagesReused = 0, dataStagesCompiled = 0, dataVerified = 0;
+    std::uint64_t stageDataHits = 0, stageDataWords = 0, stageDataVerified = 0, stageDataInserts = 0, stageDataPositions = 0;
     std::chrono::steady_clock::time_point lastReport = std::chrono::steady_clock::now();
 };
 
@@ -132,33 +138,10 @@ enum class DrawVerdict { Drawn, Nothing, Rejected };
 
 struct StageCapture {
     std::shared_ptr<const ShaderRecompiler::RecompileResult> compiled;
+    std::shared_ptr<const ShaderRecompiler::ResourceCapture> capture;
     std::vector<ShaderRecompiler::MemoryRegion> regions;
     std::uint64_t forgetSerial = 0;
     std::uint32_t pushOffset = 0;
-    ShaderRecompiler::SrtUserDataUse userDataUse;
-};
-
-struct RelocatableUserWord {
-    std::uint32_t reg;
-    std::vector<std::pair<std::int64_t, std::uint32_t>> reads;
-};
-
-struct DrawRelocation {
-    std::vector<RelocatableUserWord> words;
-    std::vector<std::uint32_t> banned;
-};
-
-struct DrawUserPatch {
-    std::size_t program;
-    std::uint32_t index, value;
-};
-
-struct DrawRelocationPending {
-    std::uint64_t key = 0, alias = 0, identity = 0;
-};
-
-struct DrawRelocationCounters {
-    std::uint64_t lookups = 0, donors = 0, refused = 0, hits = 0;
 };
 
 bool DecodeProgramsCurrent(const DrawDecode& decode, const ShaderRegistry& registry);

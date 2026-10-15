@@ -1,3 +1,4 @@
+#include "prx/libc/include/general/AsmMacros.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -61,11 +62,10 @@ int APS5_VABI sigismember_nid_postfix(const GuestSignalSet* set, int signal) {
 }
 }
 #if defined(__x86_64__)
-#ifdef _WIN32
-#define APS5_SIGNAL_ASM_FUNCTION(name) ".globl " name "\n.def " name "; .scl 2; .type 32; .endef\n" name ":\n"
-#define APS5_SIGNAL_ASM_CALL(name) "    call " name "\n"
+#define APS5_SIGNAL_ASM_FUNCTION(name) APS5_ASM_FUNCTION(name)
+#if defined(_WIN32) || defined(__APPLE__)
+#define APS5_SIGNAL_ASM_CALL(name) "    call " APS5_ASM_SYMBOL(name) "\n"
 #else
-#define APS5_SIGNAL_ASM_FUNCTION(name) ".globl " name "\n.type " name ", @function\n" name ":\n"
 #define APS5_SIGNAL_ASM_CALL(name) "    call " name "@PLT\n"
 #endif
 
@@ -110,6 +110,16 @@ asm(".text\n"
     "    popq %rsi\n"
     "    popq %rdi\n"
     "2:\n"
+#ifdef _WIN32
+    "    pushq %rdi\n"
+    "    pushq %rsi\n"
+    "    movq 16(%rdi), %rdi\n"
+    "    subq $8, %rsp\n"
+    "    call GuestStackSwitch_nid_no_patch\n"
+    "    addq $8, %rsp\n"
+    "    popq %rsi\n"
+    "    popq %rdi\n"
+#endif
     "    movq %rdi, %rdx\n"
     "    movl %esi, %eax\n"
     "    movq 0(%rdx), %rcx\n"

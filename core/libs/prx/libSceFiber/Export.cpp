@@ -2,7 +2,7 @@
 #include <cstddef>
 #include "SceTypes.hpp"
 #include "prx/libc/include/General.hpp"
-#include "prx/libc/include/general/AsmFunction.hpp"
+#include "prx/libc/include/general/AsmMacros.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
@@ -323,16 +323,14 @@ static void ReleaseHostStack(Fiber* fiber) {
 
 #else
 
-#ifdef MAP_STACK
-constexpr int HostStackMapping = MAP_STACK;
-#else
-constexpr int HostStackMapping = 0;
-#endif
-
 static void AllocateHostStack(Fiber* fiber) {
     const auto page = static_cast<std::uint64_t>(sysconf(_SC_PAGESIZE));
     const auto bytes = (fiber->contextSize + FIBER_HOST_STACK_MARGIN + page - 1) / page * page + page;
-    void* mapping = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | HostStackMapping, -1, 0);
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+#ifdef MAP_STACK
+    flags |= MAP_STACK;
+#endif
+    void* mapping = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, flags, -1, 0);
     if (mapping == MAP_FAILED) throw std::runtime_error(std::string("sceFiberInitialize: no host stack of ") + std::to_string(bytes) + " bytes for fiber '" + fiber->name + "' (errno " + std::to_string(errno) + ")");
     if (mprotect(mapping, page, PROT_NONE) != 0) {
         const int error = errno;
@@ -638,7 +636,7 @@ int32_t APS5_VABI sceFiberGetInfo(FiberObject* object, FiberInfo* fiber_info) {
     if (fiber_info->size != sizeof(FiberInfo)) return SCE_FIBER_ERROR_INVALID;
     fiber_info->entry = reinterpret_cast<FiberEntry>(fiber->entry);
     fiber_info->arg_on_initialize = fiber->argOnInitialize;
-    fiber_info->addr_context = fiber->context;
+    fiber_info->addr_context = SizedWindow(fiber);
     fiber_info->size_context = fiber->contextSize;
     std::memcpy(fiber_info->name, fiber->name, sizeof(fiber_info->name));
     fiber_info->size_context_margin = static_cast<uint64_t>(-1);

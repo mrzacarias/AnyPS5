@@ -77,16 +77,6 @@ struct RegisteredShaderState {
     Registers userConfig;
 };
 
-struct CodeHashMemo {
-    struct CodeHash {
-        std::size_t offset = ~std::size_t{0};
-        std::uint64_t hash = 0;
-    };
-    std::mutex mutex;
-    std::array<CodeHash, 4> codeHashes;
-    std::size_t nextCodeHash = 0;
-};
-
 struct ShaderSnapshot {
     std::uint64_t codeAddress;
     std::uint64_t headerAddress;
@@ -95,9 +85,9 @@ struct ShaderSnapshot {
     std::vector<std::byte> header;
     std::shared_ptr<PreparedShaders> prepared = std::make_shared<PreparedShaders>();
     std::shared_ptr<const RegisteredShaderState> registeredState;
-    std::shared_ptr<CodeHashMemo> codeHashes = std::make_shared<CodeHashMemo>();
     std::shared_ptr<std::atomic<std::uint8_t>> workgroupUse = std::make_shared<std::atomic<std::uint8_t>>(0u);
     std::shared_ptr<std::atomic<std::uint8_t>> positionVectorUse = std::make_shared<std::atomic<std::uint8_t>>(0u);
+    std::optional<std::uint32_t> userDataTailRegister;
 };
 
 
@@ -106,13 +96,14 @@ struct ShaderSnapshot {
 constexpr std::size_t RawShaderCacheEntries = 1024;
 constexpr std::size_t RawShaderCacheBytes = 32u * 1024u * 1024u;
 std::shared_ptr<const ShaderSnapshot> ReadRawShader(std::uint64_t address);
+std::shared_ptr<const ShaderSnapshot> ReadUserDataTailContinuation(std::span<const std::uint32_t> code, std::uint32_t userDataBase, std::span<const std::uint32_t> userData);
 std::shared_ptr<const ShaderSnapshot> ProgramSnapshot(const ShaderRegistry& shaders, std::uint64_t address, std::initializer_list<std::uint8_t> types);
 void NoteRawGraphicsDraw();
 bool RawGraphicsDrawn();
 bool ProgramUsesWorkgroup(const ShaderSnapshot& snapshot, std::size_t codeOffset);
 // The PA_CL_VS_OUT_CNTL position export bits a vertex program is compiled with: none for a program
 // without pos1..pos3 exports, so its artifact does not depend on them.
-std::uint32_t PositionExportLayout(const ShaderSnapshot* snapshot, std::size_t codeOffset, std::span<const std::uint32_t> code, std::uint32_t paClVsOutCntl);
+std::uint32_t PositionExportLayout(const ShaderSnapshot* snapshot, std::size_t codeOffset, std::span<const std::uint32_t> code, std::uint32_t paClVsOutCntl, const ShaderSnapshot* continuation = nullptr);
 bool VertexWorkgroupRequired(const QueueState& queue, const ShaderRegistry& registry);
 
 std::shared_ptr<const ShaderRecompiler::SourceHandle> PrepareShaderWithDiagnostics(const ShaderRecompiler::RecompileRequest& request, ShaderRecompiler::ShaderPreparationContext* preparation = nullptr);
@@ -120,11 +111,13 @@ std::shared_ptr<const ShaderRecompiler::SourceHandle> PrepareShaderWithDiagnosti
 std::uint64_t NullPixelProgramAddress();
 ShaderSnapshot PrepareNullPixelProgram(const VulkanDevice& device);
 std::optional<ShaderRecompiler::ShaderFloatMode> RegisteredFloatMode(const ShaderSnapshot& snapshot);
+std::optional<ShaderRecompiler::ShaderFloatMode> DispatchFloatMode(const ShaderSnapshot& snapshot, const Registers& live);
 std::shared_ptr<const ShaderSnapshot> RegisteredHeader(const ShaderRegistry& registry, const Shader* shader);
 std::shared_ptr<const ShaderSnapshot> RegisteredProgram(const ShaderRegistry& registry, std::uint64_t address, std::initializer_list<std::uint8_t> types);
 void PublishRegisteredShader(std::shared_ptr<ShaderRegistry>& registry, const std::shared_ptr<const ShaderSnapshot>& snapshot);
 void SubmitRegistrationPreparation(std::function<void()> task, const PreparedShaders* prepared = nullptr);
 void PrioritizeRegistrationPreparation(PreparedShaders& prepared);
+void AwaitRegistrationPreparation();
 void SubmitLibraryPrebuild(std::function<void()> task);
 void CloseRegistrationPreparation();
 
@@ -132,8 +125,6 @@ void ResolvePreparedGraphics(const ShaderSnapshot& front, const std::shared_ptr<
 
 ShaderRecompiler::RectListShaders PreparedRectangle(const ShaderSnapshot& snapshot, std::uint64_t vertexId, std::uint64_t fragmentId);
 ShaderRecompiler::RectListShaders DrawRectangle(const ShaderSnapshot& front, const std::shared_ptr<const ShaderSnapshot>& fragment, std::uint64_t vertexId, std::uint64_t fragmentId, const ShaderRecompiler::SpirvTarget& target);
-
-std::uint64_t SnapshotCodeHash(const ShaderSnapshot& snapshot, std::size_t codeOffset);
 
 std::shared_ptr<const ShaderRecompiler::SourceHandle> SourceHandleFor(const ShaderSnapshot& snapshot, std::size_t codeOffset, const ShaderRecompiler::RecompileRequest& request);
 ShaderRecompiler::PreparedShaderInvocation InvocationFor(const ShaderSnapshot& snapshot, std::size_t codeOffset, const ShaderRecompiler::RecompileRequest& request);

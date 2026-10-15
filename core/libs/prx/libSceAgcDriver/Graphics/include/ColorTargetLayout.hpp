@@ -19,6 +19,7 @@ enum class ColorTileMode : std::uint32_t {
     Standard64KB = 9,
     S4KBX = 0x15,
     D4KBX = 0x16,
+    Z64KBX = 0x18,
     D64KBX = 0x1a,
     RenderTarget = 0x1b,
     // PS4 (GFX7) tilings, in swizzle mode numbers RDNA leaves unused; Ps4Registers writes them to CB_COLOR_ATTRIB3.
@@ -33,7 +34,7 @@ constexpr bool ColorTileModeIsPs4(ColorTileMode mode) {
 }
 
 constexpr bool ColorTileModeIsXor(ColorTileMode mode) {
-    return mode == ColorTileMode::S4KBX || mode == ColorTileMode::D4KBX || mode == ColorTileMode::D64KBX || mode == ColorTileMode::RenderTarget;
+    return mode == ColorTileMode::S4KBX || mode == ColorTileMode::D4KBX || mode == ColorTileMode::Z64KBX || mode == ColorTileMode::D64KBX || mode == ColorTileMode::RenderTarget;
 }
 
 constexpr std::uint32_t ColorTileModeBlockBytes(ColorTileMode mode) {
@@ -48,7 +49,7 @@ constexpr TextureTileMode ColorTextureTileMode(ColorTileMode mode) {
         case ColorTileMode::Ps4Thin2D: return TextureTileMode::kPs4Thin2D;
         default: break;
     }
-    return mode == ColorTileMode::Linear ? TextureTileMode::kLinear : mode == ColorTileMode::Standard4KB ? TextureTileMode::kStandard4KB : mode == ColorTileMode::Standard64KB ? TextureTileMode::kStandard64KB : mode == ColorTileMode::S4KBX ? TextureTileMode::kS4KBX : mode == ColorTileMode::D4KBX ? TextureTileMode::kD4KBX : mode == ColorTileMode::D64KBX ? TextureTileMode::kD64KBX : TextureTileMode::kR64KBX;
+    return mode == ColorTileMode::Linear ? TextureTileMode::kLinear : mode == ColorTileMode::Standard4KB ? TextureTileMode::kStandard4KB : mode == ColorTileMode::Standard64KB ? TextureTileMode::kStandard64KB : mode == ColorTileMode::S4KBX ? TextureTileMode::kS4KBX : mode == ColorTileMode::D4KBX ? TextureTileMode::kD4KBX : mode == ColorTileMode::D64KBX ? TextureTileMode::kD64KBX : mode == ColorTileMode::Z64KBX ? TextureTileMode::kZ64KBX : TextureTileMode::kR64KBX;
 }
 
 ColorTileMode DecodeColorTileMode(std::uint32_t attrib3);

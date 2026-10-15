@@ -5,9 +5,9 @@
 #include "prx/libSceAgcDriver/Graphics/include/GuestTextureResource.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
 #include "Optimization/ShaderStageInputInfo.hpp"
-#include <cstring>
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 
 namespace AgcDriver::DriverDetail {
 
@@ -99,12 +99,14 @@ std::vector<std::pair<std::uint64_t, std::uint64_t>> DrawWriteRanges(const Graph
             const auto bytes = static_cast<std::uint64_t>(color.bytes) * slices;
             add(color.address, bytes);
             add(color.dccAddress, (bytes + 255) / 256);
+            add(color.cmaskAddress, static_cast<std::uint64_t>(color.cmaskBytes) * slices);
             return;
         }
         const std::uint64_t bytes = color.bytes != 0 ? static_cast<std::uint64_t>(color.bytes) : UnknownBytes;
         const auto base = color.surfaceAddress != 0 ? std::min(color.surfaceAddress, color.address) : color.address;
         if (base != 0) ranges.emplace_back(base, color.address + 2 * bytes + Slack);
         add(color.dccAddress, bytes / 16 + Slack);
+        add(color.cmaskAddress, static_cast<std::uint64_t>(color.cmaskBytes) * std::max<std::uint32_t>(color.depth, 1));
     };
     if (graphics.hasColorTarget) addColor(graphics.color);
     for (const auto& color : graphics.colors) addColor(color);

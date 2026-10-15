@@ -2,7 +2,6 @@
 #define CORE_SHADER_RECOMPILIER_OPTIMIZATION_INCLUDE_OPTIMIZATION_SRTWALKER_HPP
 
 #include "IntermediateRepresentation/IrProgram.hpp"
-#include "UserDataUse.hpp"
 
 #include <cstdint>
 #include <span>
@@ -13,6 +12,7 @@ namespace ShaderRecompiler {
 
 using SrtMemoryReader = bool (*)(void* userData, std::uint64_t address, std::uint32_t* value);
 using SrtMemoryProbe = bool (*)(void* userData, std::uint64_t address, std::uint64_t bytes);
+using SrtMemoryBulkReader = bool (*)(void* userData, std::uint64_t address, std::uint32_t* values, std::uint64_t count);
 
 // The guest addresses a walk dereferenced (Detail::Evaluator::EvaluateRawRead): the leaf read of
 // each pure flat slot (IrResourcePlan::pureFlatSlots) as (flat offset, address), set by the
@@ -33,7 +33,8 @@ struct SrtRuntime {
     SrtMemoryReader readSpecializationMemory = nullptr;
     SrtReadTrace* readTrace = nullptr;
     SrtMemoryProbe accessible = nullptr;
-    SrtUserDataUse* userDataUse = nullptr;
+    SrtMemoryProbe pendingWrite = nullptr;
+    SrtMemoryBulkReader readWords = nullptr;
 };
 
 enum class RuntimeValueType {

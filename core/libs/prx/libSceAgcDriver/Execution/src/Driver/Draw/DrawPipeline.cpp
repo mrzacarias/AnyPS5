@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include "prx/libSceAgcDriver/Execution/include/Driver/Draw/DrawPipeline.hpp"
+#include "prx/libSceAgcDriver/Execution/include/Driver/Driver.hpp"
 #include "prx/libSceAgcDriver/Execution/include/GuestMemory.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -79,6 +80,7 @@ void DrawPipeline::Enqueue(Commit commit, std::vector<Range> writes, std::uint64
     auto lock = acquire(mutex);
     rethrowFailure();
     if (items.size() >= Depth()) {
+        if (GuestMemory::GpuMutex().HeldByThisThread()) throw std::runtime_error("draw pipeline full while the enqueuing thread holds the GPU lock");
         const auto start = std::chrono::steady_clock::now();
         ++idleWaiters;
         idle.wait(lock, [&] { return items.size() < Depth(); });
@@ -153,21 +155,28 @@ void DrawPipeline::run() {
             committerWaiting = true;
             wake.wait(lock, [&] { return !items.empty(); });
             committerWaiting = false;
-            commit = &items.front().commit;
+            commit = stopped ? nullptr : &items.front().commit;
         }
         const auto start = std::chrono::steady_clock::now();
         std::exception_ptr fatal;
         bool failed = false;
+        bool shutdown = false;
         try {
-            (*commit)();
-        } catch (const std::exception& error) {
+            if (commit != nullptr) (*commit)();
+        } catch (const std::exception&) {
             failed = true;
-            static std::atomic<std::uint64_t> reported{0};
-            if (reported.fetch_add(1, std::memory_order_relaxed) < 20) std::fprintf(stderr, "[draw] pipelined commit failed: %.200s\n", error.what());
+            fatal = std::current_exception();
+        } catch (const ProcessShutdown&) {
+            shutdown = true;
+            fatal = std::current_exception();
         } catch (...) {
             fatal = std::current_exception();
         }
         const auto spent = elapsedNs(start);
+        if (fatal != nullptr && !stopped) {
+            stopped = true;
+            if (!shutdown) Driver::Get().ReportFailure(fatal);
+        }
         auto lock = acquire(mutex);
         items.pop_front();
         if (items.empty()) {

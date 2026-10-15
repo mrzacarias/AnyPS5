@@ -118,7 +118,7 @@ def td_target(module, td_path, td_lib):
 CPP_KEYWORDS = {"alignas", "alignof", "and", "asm", "auto", "bool", "break", "case", "catch", "char", "class", "const", "continue", "default", "delete", "do", "double", "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "not", "operator", "or", "private", "protected", "public", "register", "return", "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "while", "xor"}
 
 
-def typed_definition(func, nid, typed):
+def typed_definition(func, report, typed):
     names = []
     for index, (_, name) in enumerate(typed["params"]):
         if not is_valid_ident(name) or name in CPP_KEYWORDS or name in names:
@@ -127,7 +127,7 @@ def typed_definition(func, nid, typed):
     params = ", ".join("%s %s" % (kind, name) for (kind, _), name in zip(typed["params"], names)) or "void"
     lines = ["%s APS5_VABI %s(%s) {" % (typed["returns"], func, params)]
     lines += ["    static_cast<void>(%s);" % name for name in names]
-    lines.append('    NotImplemented_nid_no_patch("%s");' % nid)
+    lines.append("    NotImplemented_nid_no_patch(%s);" % report)
     if typed["returns"] != "void":
         lines.append("    return {};")
     lines.append("}")
@@ -135,6 +135,7 @@ def typed_definition(func, nid, typed):
 
 
 def generate(module, nids, db, td_path=None, td_lib=None, signatures=None):
+    module = re.sub(r"\.prx$", "", module, flags=re.IGNORECASE)
     prefix = module_prefix(module)
     path, lib = td_target(module, td_path, td_lib)
     used = set()
@@ -167,7 +168,9 @@ def generate(module, nids, db, td_path=None, td_lib=None, signatures=None):
                     break
             display = None
         used.add(func)
-        body = typed_definition(func, nid, typed) if typed is not None else ["int APS5_VABI %s(void) {" % func, '    NotImplemented_nid_no_patch("%s");' % nid, "    return 0;", "}"]
+        # A named stub reports its function name, an unnamed one its NID.
+        report = "__func__" if display is not None else '"%s"' % nid
+        body = typed_definition(func, report, typed) if typed is not None else ["int APS5_VABI %s(void) {" % func, "    NotImplemented_nid_no_patch(%s);" % report, "    return 0;", "}"]
         signature_note = "signature from shadPS4" if typed is not None else "unknown signature"
         if display is not None:
             chunks.append("")
@@ -217,7 +220,11 @@ def write_outputs(outputs):
             temporary.replace(path)
     finally:
         for temporary, path in staged:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except PermissionError:
+                temporary.chmod(0o600)
+                temporary.unlink(missing_ok=True)
 
 
 def main(argv=None):
