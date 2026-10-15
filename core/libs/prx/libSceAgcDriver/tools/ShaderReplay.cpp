@@ -7,6 +7,8 @@
 #include "Optimization/ResourceProgram.hpp"
 #include "Recompiler.hpp"
 #include "RdnaDecoder/RdnaInstructionDecoder.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
+#include <cstdlib>
 
 #if ANYPS5_ENABLE_SPIRV_TOOLS
 #include "spirv-tools/libspirv.hpp"
@@ -166,6 +168,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "usage: agc_shader_replay [--dis] [--asm] [--cfg] [--mem] [--spv] [--prepare] [--code] [--maintenance8] <shader.req>...\n  the driver writes shader_<address>.req files when APS5_DUMP_SHADERS is set\n");
         return 2;
     }
+    if (std::getenv("APS5_GCN") != nullptr) ShaderRecompiler::SetGcnShaderCode(true);
     int failures = 0;
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--dis") {
