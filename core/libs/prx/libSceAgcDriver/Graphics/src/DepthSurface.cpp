@@ -596,6 +596,16 @@ void ClearDepthSurfaces(VkDevice device) {
     std::erase_if(planeCopies(), [&](const auto& entry) { return std::get<0>(entry.first) == device; });
 }
 
+namespace {
+
+// A PS4 depth target is as large as its tiled pitch and height (DB_DEPTH_SIZE); the T#s that read it name the drawn
+// size, the corner of the surface a copy of that size reads.
+bool PS4DepthCorner(const GuestTextureResource& resource, VkExtent2D extent) {
+    return resource.tileMode == TextureTileMode::kPs4Depth && resource.width <= extent.width && resource.height <= extent.height && (resource.width != extent.width || resource.height != extent.height);
+}
+
+}
+
 std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<const std::uint32_t> words, const GuestTextureResource& resource, VkComponentMapping components) {
     const auto held = [&](const auto& surface) {
         return surface->context.device == context.device && (surface->target.address == resource.baseAddress || (surface->target.stencilAddress != 0 && surface->target.stencilAddress == resource.baseAddress));
@@ -612,8 +622,10 @@ std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<c
     });
     if (found == list.rend()) return nullptr;
     const auto& base = (*found)->target;
-    if (resource.width != base.extent.width || resource.height != base.extent.height) return nullptr;
+    const bool cropped = PS4DepthCorner(resource, base.extent);
+    if (!cropped && (resource.width != base.extent.width || resource.height != base.extent.height)) return nullptr;
     const bool stencil = base.stencilAddress != 0 && resource.baseAddress == base.stencilAddress;
+    if (cropped && stencil) return nullptr;
     const bool d16 = base.format == VK_FORMAT_D16_UNORM || base.format == VK_FORMAT_D16_UNORM_S8_UINT;
     const auto format = ResolveTextureFormat(resource.format);
     const bool depthBits = !stencil && words.size() >= 4 && ShaderRecompiler::DepthBitsTextureWidth(words[1], words[3]) == (d16 ? 16u : 32u);
@@ -623,11 +635,12 @@ std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<c
     (*found)->ApplyFastClear();
     const bool cube = resource.dimension == TextureDimension::kCube;
     const bool layered = cube || (resource.dimension == TextureDimension::k2DArray && resource.depthOrLastArray != 0);
-    if (stencil || (!layered && !integer)) return (*found)->Sampled(words, resource, components);
+    if (stencil || (!layered && !integer && !cropped)) return (*found)->Sampled(words, resource, components);
     Require((*found)->hostFormat == base.format, "sampling several slices or an integer view of a depth plane that the device stores in another depth format is not implemented");
     const auto copyFormat = integer ? VK_FORMAT_R16_UINT : d16 ? VK_FORMAT_R16_UNORM : VK_FORMAT_R32_SFLOAT;
     const auto layers = cube ? 6u : layered ? resource.depthOrLastArray + 1u : 1u;
-    if ((format != copyFormat && !depthBits) || resource.width != base.extent.width || resource.height != base.extent.height || resource.baseLevel != 0 || resource.lastLevel != 0 || resource.baseArray != 0 || (cube && resource.depthOrLastArray != 0 && resource.depthOrLastArray != 5) || (resource.dimension != TextureDimension::k2D && resource.dimension != TextureDimension::k2DArray && !cube)) {
+    const auto copyExtent = cropped ? VkExtent2D{resource.width, resource.height} : base.extent;
+    if ((format != copyFormat && !depthBits) || resource.width != copyExtent.width || resource.height != copyExtent.height || resource.baseLevel != 0 || resource.lastLevel != 0 || resource.baseArray != 0 || (cube && resource.depthOrLastArray != 0 && resource.depthOrLastArray != 5) || (resource.dimension != TextureDimension::k2D && resource.dimension != TextureDimension::k2DArray && !cube)) {
         char text[320];
         std::snprintf(text, sizeof(text), "AGC graphics: sampling the depth planes of depth surface 0x%llx (%ux%u, vk format %d) as a %ux%u texture of guest format %u (vk %d), dimension %d, %u slices, levels %u-%u, base slice %u is not implemented", static_cast<unsigned long long>(base.address), base.extent.width, base.extent.height, static_cast<int>(base.format), resource.width, resource.height, resource.format, static_cast<int>(format), static_cast<int>(resource.dimension), layers, resource.baseLevel, resource.lastLevel, resource.baseArray);
         throw std::runtime_error(text);
@@ -641,9 +654,9 @@ std::shared_ptr<Texture> DepthSurfaceTexture(const Context& context, std::span<c
         else slices.push_back({(*slice)->image, slice->get() == drawnDepth ? 0u : (*slice)->written});
     }
     const auto imageFormat = integer ? VK_FORMAT_R16_UINT : d16 ? VK_FORMAT_D16_UNORM : VK_FORMAT_D32_SFLOAT;
-    auto& copy = planeCopies()[{context.device, base.address, base.extent.width, base.extent.height, imageFormat, layers}];
+    auto& copy = planeCopies()[{context.device, base.address, copyExtent.width, copyExtent.height, imageFormat, layers}];
     if (copy == nullptr) {
-        copy = std::make_unique<DepthPlaneCopy>(context, base.extent, imageFormat, layers);
+        copy = std::make_unique<DepthPlaneCopy>(context, copyExtent, imageFormat, layers);
     }
     return copy->Refresh(slices, resource, components, cube || resource.dimension == TextureDimension::k2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D);
 }
@@ -693,7 +706,7 @@ bool DepthSurfaceAt(const Context& context, std::span<const std::uint32_t> words
     });
     if (found == list.rend()) return false;
     const auto& target = (*found)->target;
-    if (resource.width != target.extent.width || resource.height != target.extent.height) return false;
+    if ((resource.width != target.extent.width || resource.height != target.extent.height) && !PS4DepthCorner(resource, target.extent)) return false;
     const bool stencil = target.stencilAddress != 0 && target.stencilAddress == resource.baseAddress;
     const bool d16 = target.format == VK_FORMAT_D16_UNORM || target.format == VK_FORMAT_D16_UNORM_S8_UINT;
     const auto expected = stencil ? VK_FORMAT_R8_UINT : d16 ? VK_FORMAT_R16_UNORM : VK_FORMAT_R32_SFLOAT;

@@ -1,3 +1,4 @@
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "GraphicsTests.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/GuestTextureResource.hpp"
@@ -275,6 +276,20 @@ void RunDepthSurfaceReuseTests() {
     Require(storageAliasesDepth(context, {depth16, FormatR16Unorm, 128, 128}), "the newest depth extent must still reject actual storage access");
     Require(storageAliasesDepth(context, {stencil16, FormatR8Uint, 128, 128}), "storage access to the actual stencil plane must remain rejected");
     Require(!storageAliasesDepth(context, {stencil16, FormatR11G11B10Float, 128, 128}), "a stencil address reused for color is not a stencil storage alias");
+
+    // A PS4 depth target is as large as its tiled pitch and height; the depth-tiled (index 0) T#s that read it name the
+    // drawn corner.
+    constexpr std::uint64_t ps4Depth = 0x48000000;
+    DepthSurfaceView(context, {ps4Depth, 0, {2048, 1152}, VK_FORMAT_D32_SFLOAT, 1.0f, 0});
+    auto corner = tsharp({ps4Depth, FormatR32Float, 1920, 1080});
+    auto beyond = tsharp({ps4Depth, FormatR32Float, 2048, 1200});
+    corner[7] = beyond[7] = 1u << 31u;
+    ShaderRecompiler::SetGcnShaderCode(true);
+    const auto cornerResource = DecodeTextureResource(corner);
+    const auto beyondResource = DecodeTextureResource(beyond);
+    ShaderRecompiler::SetGcnShaderCode(false);
+    Require(cornerResource.tileMode == TextureTileMode::kPs4Depth && DepthSurfaceAt(context, corner, cornerResource), "the drawn corner of a PS4 depth target must be read as its depth plane");
+    Require(!DepthSurfaceAt(context, beyond, beyondResource), "a PS4 depth view larger than the surface is no corner of it");
 
     ClearDepthSurfaces(context.device);
 }
