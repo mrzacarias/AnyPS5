@@ -445,6 +445,11 @@ int APS5_VABI sceSaveDataInitialize3(const void* init) {
     return SAVE_DATA_OK;
 }
 
+// The PS4 SDK 1.x name of Initialize3.
+int APS5_VABI sceSaveDataInitialize(const void* init) {
+    return sceSaveDataInitialize3(init);
+}
+
 int APS5_VABI sceSaveDataLoadIcon(const SaveDataMountPoint* mount_point, SaveDataIcon* icon) {
     (void)icon;
     if (mount_point == nullptr) {
@@ -518,6 +523,21 @@ static int mount3(const SaveDataMount3* mount, SaveDataMountResult* mount_result
 int APS5_VABI sceSaveDataMount3(const SaveDataMount3* mount, SaveDataMountResult* mount_result) {
     const int rc = mount3(mount, mount_result);
     SAVEDATA_TRACE("mount3 user=%d dir=%s mode=0x%x blocks=%llu -> 0x%08x point=%s status=%u", mount != nullptr ? mount->user_id : -1, mount != nullptr && mount->dir_name != nullptr ? mount->dir_name->data : "(null)", mount != nullptr ? mount->mount_mode : 0u, mount != nullptr ? static_cast<unsigned long long>(mount->blocks) : 0ull, static_cast<unsigned>(rc), mount_result != nullptr ? mount_result->mount_point.data : "", mount_result != nullptr ? mount_result->mount_status : 0u);
+    return rc;
+}
+
+// The PS4 SDK 1.x mount of the title's own save data, as Mount3. Another title's save data (title_id) is not kept apart.
+int APS5_VABI sceSaveDataMount(const SaveDataMount* mount, SaveDataMountResult* mount_result) {
+    if (mount == nullptr) {
+        throw std::runtime_error("sceSaveDataMount: null mount");
+    }
+    SaveDataMount3 own{};
+    own.user_id = mount->user_id;
+    own.dir_name = mount->dir_name;
+    own.blocks = mount->blocks;
+    own.mount_mode = mount->mount_mode;
+    const int rc = mount3(&own, mount_result);
+    SAVEDATA_TRACE("mount user=%d dir=%s mode=0x%x -> 0x%08x point=%s", mount->user_id, mount->dir_name != nullptr ? mount->dir_name->data : "(null)", mount->mount_mode, static_cast<unsigned>(rc), mount_result != nullptr ? mount_result->mount_point.data : "");
     return rc;
 }
 
@@ -693,6 +713,38 @@ int APS5_VABI sceSaveDataSetupSaveDataMemory2(const SaveDataMemorySetup2* setup_
     return rc;
 }
 
+// The PS4 SDK 1.x save data memory: slot 0 of the memory2 calls, with the param set apart from the setup.
+int APS5_VABI sceSaveDataSetupSaveDataMemory(int user_id, std::size_t memory_size, const SaveDataParam* param) {
+    SaveDataMemorySetup2 setup{};
+    setup.user_id = user_id;
+    setup.memory_size = memory_size;
+    const int rc = setupSaveDataMemory2(&setup, nullptr);
+    if (rc == SAVE_DATA_OK && param != nullptr) {
+        SaveDataMemorySet2 set{};
+        set.user_id = user_id;
+        set.param = param;
+        setSaveDataMemory2(&set);
+    }
+    SAVEDATA_TRACE("setupMemory user=%d size=%zu -> 0x%08x", user_id, memory_size, static_cast<unsigned>(rc));
+    return rc;
+}
+
+int APS5_VABI sceSaveDataGetSaveDataMemory(int user_id, void* buf, std::size_t buf_size, std::int64_t offset) {
+    SaveDataMemoryData data{buf, buf_size, static_cast<std::size_t>(offset)};
+    SaveDataMemoryGet2 get{};
+    get.user_id = user_id;
+    get.data = &data;
+    return getSaveDataMemory2(&get);
+}
+
+int APS5_VABI sceSaveDataSetSaveDataMemory(int user_id, const void* buf, std::size_t buf_size, std::int64_t offset) {
+    SaveDataMemoryData data{const_cast<void*>(buf), buf_size, static_cast<std::size_t>(offset)};
+    SaveDataMemorySet2 set{};
+    set.user_id = user_id;
+    set.data = &data;
+    return setSaveDataMemory2(&set);
+}
+
 int APS5_VABI sceSaveDataSyncSaveDataMemory(const void* sync_param) {
     if (sync_param == nullptr) {
         return SAVE_DATA_ERROR_PARAMETER;
@@ -757,6 +809,11 @@ int APS5_VABI sceSaveDataUmount2(uint32_t mode, const SaveDataMountPoint* mount_
     const int rc = umount2(mode, mount_point);
     SAVEDATA_TRACE("umount2 mode=0x%x point=%s -> 0x%08x", mode, mount_point != nullptr ? mount_point->data : "(null)", static_cast<unsigned>(rc));
     return rc;
+}
+
+// The PS4 SDK 1.x unmount: Umount2 without a mode.
+int APS5_VABI sceSaveDataUmount(const SaveDataMountPoint* mount_point) {
+    return sceSaveDataUmount2(0u, mount_point);
 }
 
 int APS5_VABI sceSaveDataTransferringMountPs4(const SaveDataTransferringMount* mount, SaveDataMountResult* mount_result) {

@@ -1469,6 +1469,18 @@ struct SaveDataSearchInfo {
 static_assert(sizeof(SaveDataSearchInfo) == 48);
 struct SaveDataMemoryData { void* buf; std::size_t buf_size; std::size_t offset; };
 
+// The PS4 SDK 1.x mount: title_id and fingerprint name another title's save data.
+struct SaveDataMount {
+    int user_id;
+    int pad;
+    const SceSaveDataTitleId* title_id;
+    const SceSaveDataDirName* dir_name;
+    const void* fingerprint;
+    std::uint64_t blocks;
+    std::uint32_t mount_mode;
+    std::uint8_t reserved[32];
+};
+
 struct SaveDataMount3 {
     int user_id;
     int pad;
