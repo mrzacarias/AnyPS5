@@ -8,6 +8,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/TextureFormat.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureDetiler.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/TextureTiling.hpp"
+#include "RdnaDecoder/GcnInstructionDecoder.hpp"
 #include "RdnaDecoder/include/RdnaDecoder/RdnaDescriptorFormat.hpp"
 #include <algorithm>
 #include <array>
@@ -981,6 +982,8 @@ std::uint64_t DepthSurfacesSerial() {
 }
 
 std::uint64_t DepthSliceBytes(VkExtent2D extent, std::uint32_t bytesPerTexel) {
+    // A PS4 depth or stencil plane is its tiled pitch times its tiled height (DB_DEPTH_SIZE), with no block rounding.
+    if (ShaderRecompiler::GcnShaderCode()) return static_cast<std::uint64_t>(extent.width) * extent.height * bytesPerTexel;
     const std::uint32_t blockWidth = bytesPerTexel == 4 ? 128u : 256u;
     const std::uint32_t blockHeight = bytesPerTexel == 1 ? 256u : 128u;
     const auto width = static_cast<std::uint64_t>((extent.width + blockWidth - 1) / blockWidth * blockWidth);

@@ -372,6 +372,17 @@ void RunDepthSurfaceReuseTests() {
     ShaderRecompiler::SetGcnShaderCode(false);
     Require(cornerResource.tileMode == TextureTileMode::kPs4Depth && DepthSurfaceAt(context, corner, cornerResource), "the drawn corner of a PS4 depth target must be read as its depth plane");
     Require(!DepthSurfaceAt(context, beyond, beyondResource), "a PS4 depth view larger than the surface is no corner of it");
+    // A PS4 plane is its pitch times its height: a color target placed right after the stencil plane overlaps neither.
+    constexpr std::uint64_t ps4Paired = 0x4a000000;
+    constexpr std::uint64_t ps4Stencil = ps4Paired + 2048u * 1152u * 4u;
+    auto pairedCorner = tsharp({ps4Paired, FormatR32Float, 1920, 1080});
+    pairedCorner[7] = 1u << 31u;
+    ShaderRecompiler::SetGcnShaderCode(true);
+    const auto pairedResource = DecodeTextureResource(pairedCorner);
+    DepthSurfaceView(context, {ps4Paired, ps4Stencil, {2048, 1152}, VK_FORMAT_D32_SFLOAT_S8_UINT, 1.0f, 0});
+    RetireDepthSurfaces(context.device, ps4Stencil + 2048u * 1152u + 0x10000u, 1920u * 1088u * 4u);
+    ShaderRecompiler::SetGcnShaderCode(false);
+    Require(DepthSurfaceAt(context, pairedCorner, pairedResource), "a color target past a PS4 stencil plane retired its depth surface");
     constexpr std::uint64_t shared = 0x70000000;
     constexpr std::uint64_t stencilA = 0x71000000;
     constexpr std::uint64_t stencilB = 0x72000000;
