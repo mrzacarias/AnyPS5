@@ -48,9 +48,10 @@ int main() {
     WritePs4ContextRegister(context, userConfig, 0x2a5, 1u);
     expect(userConfig, 0x24b, 1u, "GE_MULTI_PRIM_IB_RESET_EN");
 
-    // A 32-bit depth surface with HTILE (TILE_SURFACE_ENABLE) and tile mode index 2: the GFX7 HTILE is not read.
+    // A 32-bit depth surface with HTILE (TILE_SURFACE_ENABLE) and tile mode index 2 keeps its HTILE, whose fast clears
+    // (ZMASK 0) the GFX7 layout shares.
     WritePs4ContextRegister(context, userConfig, 0x010, 3u | (2u << 20u) | (1u << 29u));
-    expect(context, 0x010, 3u | (2u << 20u), "DB_Z_INFO");
+    expect(context, 0x010, 3u | (2u << 20u) | (1u << 29u), "DB_Z_INFO");
 
     // Registers that need no translation keep their value.
     WritePs4ContextRegister(context, userConfig, 0x200, 0x7u);

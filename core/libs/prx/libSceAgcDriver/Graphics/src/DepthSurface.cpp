@@ -553,6 +553,25 @@ std::optional<MemoryValueFill> MatchMemoryValueFill(std::span<const std::uint32_
     return MemoryValueFill{address, static_cast<std::size_t>(dwords * 4u), valueAddress};
 }
 
+std::optional<MemoryValueFill> MatchGcnMemoryValueFill(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, const std::array<std::uint32_t, 3>& numThreads, const std::array<std::uint32_t, 3>& groups) {
+    static constexpr std::array<std::uint32_t, 18> kernel{0xbeeb03ffu, 0x0000000bu, 0x8f008610u, 0x4a000000u, 0xc2400d00u, 0xbf8c007fu, 0x7d880000u, 0xbe82246au, 0x36020001u, 0xbf880007u, 0xe0002000u, 0x80010101u, 0x7d88000au, 0xbe80246au, 0xbf8c0f70u, 0xe0102000u, 0x80020100u, 0xbf810000u};
+    if (userData.size() < 16 || numThreads != std::array<std::uint32_t, 3>{64u, 1u, 1u} || groups[1] != 1u || groups[2] != 1u) return std::nullopt;
+    if (code.size() < kernel.size() || !std::equal(kernel.begin(), kernel.end(), code.begin())) return std::nullopt;
+    // A GCN V# keeps the address bits 39:32 in word 1 bits 7:0.
+    const auto base = [&](std::size_t at) { return userData[at] | (static_cast<std::uint64_t>(userData[at + 1] & 0xffu) << 32u); };
+    const auto stride = (userData[9] >> 16u) & 0x3fffu;
+    const bool swizzled = (userData[9] >> 31u) != 0;
+    const bool addTid = ((userData[11] >> 23u) & 1u) != 0;
+    if (stride != 4u || swizzled || addTid || base(12) == 0) return std::nullopt;
+    // The count and the index mask of the source dwords; a zero mask fills one value.
+    std::array<std::uint32_t, 2> constants{};
+    GuestMemory::Read(base(12), std::as_writable_bytes(std::span(constants)), 4);
+    const auto dwords = std::min<std::uint64_t>({static_cast<std::uint64_t>(groups[0]) * 64u, constants[0], userData[10]});
+    const auto valueAddress = base(4);
+    if (constants[1] != 0u || dwords == 0 || userData[6] == 0 || valueAddress == 0 || (valueAddress & 3u) != 0) return std::nullopt;
+    return MemoryValueFill{base(8), static_cast<std::size_t>(dwords * 4u), valueAddress};
+}
+
 void NoteMemoryValueFill(const MemoryValueFill& fill) {
     std::uint32_t value = 0;
     GuestMemory::Read(fill.valueAddress, std::as_writable_bytes(std::span(&value, 1)), 4);

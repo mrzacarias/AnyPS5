@@ -28,6 +28,10 @@ struct MemoryValueFill {
     std::uint64_t valueAddress;
 };
 std::optional<MemoryValueFill> MatchMemoryValueFill(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, const std::array<std::uint32_t, 3>& numThreads, const std::array<std::uint32_t, 3>& groups);
+// The PS4 (GCN) fill kernel of Gnm titles (Limbo clears its HTILE with it): thread i below the count in the
+// constants of the buffer in s[12:15] stores the dword of the buffer in s[4:7] at index i & mask (the next constant)
+// to element i of the buffer in s[8:11]. Only a zero mask, one value, is a memory value fill.
+std::optional<MemoryValueFill> MatchGcnMemoryValueFill(std::span<const std::uint32_t> code, std::span<const std::uint32_t> userData, const std::array<std::uint32_t, 3>& numThreads, const std::array<std::uint32_t, 3>& groups);
 void NoteMemoryValueFill(const MemoryValueFill& fill);
 bool DepthSurfaceHolds(const Context& context, const GuestTextureResource& resource, const Texture* texture);
 void NoteDepthMetadataFill(std::uint64_t address, std::size_t bytes, std::uint32_t pattern);

@@ -1418,6 +1418,44 @@ void htileDepthClearTests() {
     Require(address(std::span(kernel).first(16), {0, 0, 0x0dc50000u, 0x40u, 0u, 0x00000ff0u}, wave) == 0, "a truncated kernel was taken for RADV's HTILE update");
 }
 
+void gcnMemoryValueFillTests() {
+    static constexpr std::array<std::uint32_t, 18> kernel{0xbeeb03ffu, 0x0000000bu, 0x8f008610u, 0x4a000000u, 0xc2400d00u, 0xbf8c007fu, 0x7d880000u, 0xbe82246au, 0x36020001u, 0xbf880007u, 0xe0002000u, 0x80010101u, 0x7d88000au, 0xbe80246au, 0xbf8c0f70u, 0xe0102000u, 0x80020100u, 0xbf810000u};
+    const std::array<std::uint32_t, 3> wave{64, 1, 1};
+    static std::array<std::uint32_t, 2> constants{};
+    static const std::uint32_t value = 0xfffffff0u;
+    const auto valueAddress = reinterpret_cast<std::uintptr_t>(&value);
+    const auto constantsAddress = reinterpret_cast<std::uintptr_t>(constants.data());
+    // Limbo's HTILE clear: 768 groups store the value to the 0xc000 dwords at 0x380040000.
+    const std::array<std::uint32_t, 16> userData{0u, 0u, 0u, 0u, static_cast<std::uint32_t>(valueAddress), static_cast<std::uint32_t>((valueAddress >> 32u) & 0xffu) | (4u << 16u), 1u, 0x20024004u,
+        0x80040000u, 0x00047003u, 0xc000u, 0x18024004u, static_cast<std::uint32_t>(constantsAddress), static_cast<std::uint32_t>((constantsAddress >> 32u) & 0xffu) | (4u << 16u), 1u, 0x20077facu};
+    const auto match = [&](std::span<const std::uint32_t> code, std::array<std::uint32_t, 16> words, std::array<std::uint32_t, 3> threads, std::array<std::uint32_t, 3> groups) {
+        return AgcDriver::Graphics::MatchGcnMemoryValueFill(code, words, threads, groups);
+    };
+    constants = {0xc000u, 0u};
+    const auto fill = match(kernel, userData, wave, {768, 1, 1});
+    Require(fill.has_value() && fill->address == 0x380040000ull && fill->bytes == 0x30000u && fill->valueAddress == valueAddress, "Limbo's GCN HTILE fill was not recognized");
+    Require(match(kernel, userData, wave, {384, 1, 1})->bytes == 0x18000u, "a GCN fill of half the groups did not cover half the buffer");
+    constants = {0x100u, 0u};
+    Require(match(kernel, userData, wave, {768, 1, 1})->bytes == 0x400u, "a GCN fill was not clipped to its count");
+    constants = {0xc000u, 0u};
+    auto records = userData;
+    records[10] = 0x80u;
+    Require(match(kernel, records, wave, {768, 1, 1})->bytes == 0x200u, "a GCN fill past NUM_RECORDS was not clipped to it");
+    constants = {0xc000u, 1u};
+    Require(!match(kernel, userData, wave, {768, 1, 1}), "a GCN fill of two alternating dwords was taken for a fill of one value");
+    constants = {0xc000u, 0u};
+    auto strided = userData;
+    strided[9] = 0x00087003u;
+    Require(!match(kernel, strided, wave, {768, 1, 1}), "a GCN fill with an 8-byte stride was taken for a dword fill");
+    auto indexed = userData;
+    indexed[11] |= 1u << 23u;
+    Require(!match(kernel, indexed, wave, {768, 1, 1}), "a GCN fill through ADD_TID_ENABLE was taken for a plain fill");
+    Require(!match(kernel, userData, {32, 1, 1}, {768, 1, 1}) && !match(kernel, userData, wave, {768, 2, 1}), "the GCN fill matched another thread or group shape");
+    auto other = kernel;
+    other[8] ^= 1u;
+    Require(!match(other, userData, wave, {768, 1, 1}) && !match(std::span(kernel).first(17), userData, wave, {768, 1, 1}), "a different or truncated kernel was taken for the GCN fill");
+}
+
 void memoryValueFillTests() {
     static constexpr std::array<std::uint32_t, 9> kernel{0xd7460000u, 0x04010c08u, 0xf4201a82u, 0xfa000000u, 0xbf8cc07fu, 0x7e02026au, 0xe0102000u, 0x80000100u, 0xbf810000u};
     const std::array<std::uint32_t, 3> wave{64, 1, 1};
@@ -5628,6 +5666,7 @@ int main(int argc, char** argv) {
         OneDimensionalColorTests();
         htileDepthClearTests();
         memoryValueFillTests();
+        gcnMemoryValueFillTests();
         ZExportTests();
         unorm10_11_11TargetTests();
         DepthBoundsBiasTests();
