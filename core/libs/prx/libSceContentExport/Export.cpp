@@ -24,6 +24,15 @@ void RequireSession(const char* function, std::int32_t expId) {
 
 extern "C" {
 
+// The first SDK init: the parameters of Init2, whose reserved fields it does not check.
+int APS5_VABI sceContentExportInit(const ContentExportInitParam2* init_param) {
+    if (init_param == nullptr) APS5_INVALID_ARG_EX;
+    if (init_param->malloc_func == nullptr || init_param->free_func == nullptr) throw std::invalid_argument(std::string(__func__) + ": missing allocator functions");
+    bool expected = false;
+    if (!g_initialized.compare_exchange_strong(expected, true)) throw std::logic_error(std::string(__func__) + ": already initialized");
+    return 0;
+}
+
 int APS5_VABI sceContentExportInit2(const ContentExportInitParam2* init_param) {
     if (init_param == nullptr) APS5_INVALID_ARG_EX;
     if (init_param->malloc_func == nullptr || init_param->free_func == nullptr) throw std::invalid_argument(std::string(__func__) + ": missing allocator functions");
